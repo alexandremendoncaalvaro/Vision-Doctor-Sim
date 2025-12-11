@@ -16,14 +16,18 @@ export const STANDARD_APERTURES = [1.4, 2, 2.8, 4, 5.6, 8, 11, 16];
 // Physical size of simulated objects in mm
 export const OBJECT_DIMS: Record<ObjectType, { w: number; h: number, depth: number }> = {
   [ObjectType.PCB]: { w: 80, h: 60, depth: 5 },
-  [ObjectType.MetalPart]: { w: 50, h: 50, depth: 20 },
-  [ObjectType.Packaging]: { w: 60, h: 90, depth: 10 },
+  [ObjectType.GlassBottle]: { w: 60, h: 180, depth: 60 },
+  [ObjectType.AluminumCan]: { w: 66, h: 120, depth: 66 },
+  [ObjectType.MatteBlock]: { w: 40, h: 40, depth: 40 },
+  [ObjectType.BottleCap]: { w: 28, h: 28, depth: 6 },
 };
 
 export const OBJECT_GOALS: Record<ObjectType, string> = {
   [ObjectType.PCB]: "Goal: Inspect solder bridges and read laser-etched component text.",
-  [ObjectType.MetalPart]: "Goal: Detect fine surface scratches. (Hint: Try Low Angle or Coaxial light)",
-  [ObjectType.Packaging]: "Goal: Read embossed expiration date (Relief) and check pill integrity."
+  [ObjectType.GlassBottle]: "Goal: Inspect fill level and contour. Manage specular reflections on glass.",
+  [ObjectType.AluminumCan]: "Goal: Inspect printed codes on curved metal. Avoid hotspots and glare.",
+  [ObjectType.MatteBlock]: "Goal: Calibrate geometry and contrast without specular distractions.",
+  [ObjectType.BottleCap]: "Goal: Inspect ridges and logo. Use Low Angle light to reveal texture."
 };
 
 export const DEFAULT_ADVICE = "Adjust parameters to inspect the object. Click 'Analyze Setup' for AI feedback.";

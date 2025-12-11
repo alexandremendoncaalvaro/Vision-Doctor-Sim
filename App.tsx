@@ -132,8 +132,8 @@ const App: React.FC = () => {
     const isDarkBg = bg === '#050505' || bg === '#064e3b' || bg === '#1e3a8a';
     
     if (obj === ObjectType.PCB && isDarkBg) res.contrast = 'poor';
-    if (obj === ObjectType.MetalPart && bg === '#475569') res.contrast = 'poor'; // Gray on Gray
-    if (obj === ObjectType.Packaging && !isDarkBg) res.contrast = 'poor'; // White on White
+    if (obj === ObjectType.MatteBlock && bg === '#475569') res.contrast = 'poor'; // Gray on Gray
+    if (obj === ObjectType.AluminumCan && !isDarkBg) res.contrast = 'poor'; // Silver on White/Gray
 
     return res;
   }, [state, metrics]);

@@ -25,8 +25,10 @@ export enum LightType {
 
 export enum ObjectType {
   PCB = "PCB Board",
-  MetalPart = "Metal Cylinder",
-  Packaging = "Pharma Blister"
+  GlassBottle = "Glass Bottle (Amber)",
+  AluminumCan = "Aluminum Can",
+  MatteBlock = "Matte Block",
+  BottleCap = "Bottle Cap"
 }
 
 export interface SimulationState {
