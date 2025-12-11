@@ -358,27 +358,74 @@ function createEtchedTexture(): THREE.Texture {
   return tex;
 }
 
-function createCapTexture(): THREE.Texture {
+function createBeerLabelTexture(name: string, subtext: string, hue: number): THREE.Texture {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
-    canvas.height = 512;
+    canvas.height = 256;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-        ctx.fillStyle = '#b91c1c'; // Dark Red
-        ctx.fillRect(0,0,512,512);
+        // Gold/Foil background effect
+        const grad = ctx.createLinearGradient(0, 0, 512, 0);
+        grad.addColorStop(0, `hsl(${hue}, 80%, 20%)`);
+        grad.addColorStop(0.5, `hsl(${hue}, 60%, 40%)`); // Highlight
+        grad.addColorStop(1, `hsl(${hue}, 80%, 20%)`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 512, 256);
+        
+        // Border
+        ctx.strokeStyle = '#d4af37'; // Gold
+        ctx.lineWidth = 10;
+        ctx.strokeRect(10, 10, 492, 236);
+
+        // Text
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 60px Serif';
+        ctx.fillText(name.toUpperCase(), 256, 100);
+        
+        ctx.fillStyle = '#facc15';
+        ctx.font = 'italic 30px Sans-serif';
+        ctx.fillText(subtext, 256, 160);
+
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '16px Monospace';
+        ctx.fillText('ALC 5.2% VOL | 330ML', 256, 210);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+}
+
+function createCrownCapTexture(color: string): THREE.Texture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+        ctx.fillStyle = color; 
+        ctx.fillRect(0,0,256,256);
 
         // Logo
         ctx.beginPath();
-        ctx.arc(256, 256, 180, 0, Math.PI * 2);
+        ctx.arc(128, 128, 100, 0, Math.PI * 2);
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 15;
+        ctx.lineWidth = 8;
         ctx.stroke();
 
-        ctx.font = 'bold 80px sans-serif';
+        ctx.font = 'bold 100px sans-serif';
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('BREW', 256, 256);
+        ctx.fillText('VD', 128, 128); // Vision Doctor
+        
+        // Dent effect
+        const grad = ctx.createRadialGradient(128,128, 50, 128,128,128);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.3)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0,0,256,256);
     }
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
@@ -390,6 +437,10 @@ function updateObject(group: THREE.Group, type: ObjectType) {
     const child = group.children[0];
     group.remove(child);
     if ((child as any).geometry) (child as any).geometry.dispose();
+    if ((child as any).material) {
+        if (Array.isArray((child as any).material)) (child as any).material.forEach((m:any) => m.dispose());
+        else (child as any).material.dispose();
+    }
   }
   const dim = OBJECT_DIMS[type];
 
@@ -421,91 +472,124 @@ function updateObject(group: THREE.Group, type: ObjectType) {
      }
   } 
   else if (type === ObjectType.GlassBottle) {
-      // Bottle aligned along Y axis (lying flat for side inspection)
-      // Body
-      const bodyRadius = dim.w / 2;
-      const bodyHeight = dim.h * 0.6;
-      const neckRadius = dim.w / 4;
-      const neckHeight = dim.h * 0.3;
+      // High Quality Beer Bottle (Lathe)
+      // Dimensions: h=180, w=60 => r=30
+      // We will model it standing up along Y
+      const h = dim.h;
+      const r = dim.w / 2;
       
-      const bodyGeo = new THREE.CylinderGeometry(bodyRadius, bodyRadius, bodyHeight, 32);
-      const shoulderGeo = new THREE.CylinderGeometry(neckRadius, bodyRadius, dim.h * 0.1, 32);
-      const neckGeo = new THREE.CylinderGeometry(neckRadius, neckRadius, neckHeight, 32);
-      
+      const points = [];
+      // Profile for Lathe
+      points.push(new THREE.Vector2(0, 0)); // Center bottom
+      points.push(new THREE.Vector2(r * 0.85, 0)); // Flat bottom
+      points.push(new THREE.Vector2(r, r * 0.2)); // Rounded corner
+      points.push(new THREE.Vector2(r, h * 0.55)); // Body up to shoulder
+      points.push(new THREE.Vector2(r * 0.35, h * 0.75)); // Neck start
+      points.push(new THREE.Vector2(r * 0.32, h * 0.95)); // Neck top
+      points.push(new THREE.Vector2(r * 0.4, h * 0.96)); // Finish bulge bottom
+      points.push(new THREE.Vector2(r * 0.4, h * 0.99)); // Finish bulge top
+      points.push(new THREE.Vector2(r * 0.32, h)); // Top lip
+      points.push(new THREE.Vector2(0, h)); // Close top for cap
+
+      const glassGeo = new THREE.LatheGeometry(points, 32);
       const glassMat = new THREE.MeshPhysicalMaterial({
-          color: 0xdf8f1f, // Amber
-          transmission: 0.9,
+          color: 0x5c3a21, // Deep Amber
+          transmission: 0.95,
           opacity: 1,
-          metalness: 0.1,
-          roughness: 0.05,
+          metalness: 0.0,
+          roughness: 0.1,
           ior: 1.5,
           thickness: 2.0,
-          transparent: true
+          side: THREE.FrontSide
       });
-
-      const body = new THREE.Mesh(bodyGeo, glassMat);
-      body.rotation.z = Math.PI / 2; // Lay flat along X axis (so side is visible from Z)
-      group.add(body);
-
-      const shoulder = new THREE.Mesh(shoulderGeo, glassMat);
-      shoulder.rotation.z = Math.PI / 2;
-      shoulder.position.x = bodyHeight/2 + (dim.h * 0.1)/2;
-      group.add(shoulder);
-
-      const neck = new THREE.Mesh(neckGeo, glassMat);
-      neck.rotation.z = Math.PI / 2;
-      neck.position.x = bodyHeight/2 + (dim.h * 0.1) + neckHeight/2;
-      group.add(neck);
-
-      // Liquid fill
-      const liqGeo = new THREE.CylinderGeometry(bodyRadius - 2, bodyRadius - 2, bodyHeight - 10, 32);
-      const liqMat = new THREE.MeshStandardMaterial({ color: 0x3f1f00, roughness: 0.2 });
+      const bottle = new THREE.Mesh(glassGeo, glassMat);
+      
+      // Liquid (Lathe slightly smaller)
+      const liqPoints = points.slice(0, 6).map(p => new THREE.Vector2(p.x * 0.9, p.y < h*0.8 ? p.y : h*0.8));
+      const liqGeo = new THREE.LatheGeometry(liqPoints, 32);
+      const liqMat = new THREE.MeshStandardMaterial({ 
+          color: 0x331a00, 
+          roughness: 0.2 
+      });
       const liquid = new THREE.Mesh(liqGeo, liqMat);
-      liquid.rotation.z = Math.PI / 2;
-      liquid.position.x = -5;
-      group.add(liquid);
+
+      // Label (Cylinder wrapper)
+      const labelGeo = new THREE.CylinderGeometry(r + 0.1, r + 0.1, h * 0.3, 32, 1, true);
+      const labelMat = new THREE.MeshStandardMaterial({ 
+          map: createBeerLabelTexture("SimulBrew", "Premium Lager", 25), 
+          transparent: true,
+          side: THREE.DoubleSide
+      });
+      const label = new THREE.Mesh(labelGeo, labelMat);
+      label.position.y = h * 0.35;
+      label.rotation.y = -Math.PI / 2;
+
+      // Crown Cap
+      const capGeo = new THREE.CylinderGeometry(r*0.35, r*0.35, 4, 21);
+      const capMat = new THREE.MeshStandardMaterial({ color: 0xc0c0c0, metalness: 0.8, roughness: 0.3 });
+      const cap = new THREE.Mesh(capGeo, capMat);
+      cap.position.y = h;
+      
+      const bottleGroup = new THREE.Group();
+      bottleGroup.add(bottle);
+      bottleGroup.add(liquid);
+      bottleGroup.add(label);
+      bottleGroup.add(cap);
+
+      // Center the group vertically
+      bottleGroup.position.y = -h/2;
+      group.add(bottleGroup);
   }
   else if (type === ObjectType.AluminumCan) {
-      // Can lying flat
-      const radius = dim.w / 2;
-      const height = dim.h;
+      // Dimensions: 66x120
+      const h = dim.h;
+      const r = dim.w / 2;
       
-      const bodyGeo = new THREE.CylinderGeometry(radius, radius, height, 64);
-      const canMat = new THREE.MeshStandardMaterial({
-          color: 0xe5e5e5, // Silver
-          metalness: 0.9,
-          roughness: 0.25,
+      // Main Body
+      const bodyH = h * 0.8;
+      const bodyGeo = new THREE.CylinderGeometry(r, r, bodyH, 64);
+      const bodyMat = new THREE.MeshStandardMaterial({
+           color: 0xffffff,
+           map: createBeerLabelTexture("RoboHops", "Neural IPA", 200),
+           metalness: 0.4,
+           roughness: 0.3
       });
-      const can = new THREE.Mesh(bodyGeo, canMat);
-      can.rotation.z = Math.PI / 2;
-      group.add(can);
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      // Fix texture mapping for cylinder (wrap around)
+      body.rotation.y = -Math.PI/2;
+      
+      // Taper Bottom
+      const taperH = h * 0.08;
+      const bottomGeo = new THREE.CylinderGeometry(r, r * 0.7, taperH, 64);
+      const metalMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, metalness: 0.9, roughness: 0.2 });
+      const bottom = new THREE.Mesh(bottomGeo, metalMat);
+      bottom.position.y = -bodyH/2 - taperH/2;
+      
+      // Taper Top
+      const topGeo = new THREE.CylinderGeometry(r * 0.8, r, taperH, 64);
+      const top = new THREE.Mesh(topGeo, metalMat);
+      top.position.y = bodyH/2 + taperH/2;
 
-      // Rims
-      const rimGeo = new THREE.TorusGeometry(radius, 1.5, 16, 64);
-      const rim1 = new THREE.Mesh(rimGeo, canMat);
-      rim1.rotation.y = Math.PI / 2;
-      rim1.position.x = height / 2;
-      group.add(rim1);
+      // Rim/Lid
+      const rimGeo = new THREE.TorusGeometry(r * 0.8, 1.5, 16, 64);
+      const rim = new THREE.Mesh(rimGeo, metalMat);
+      rim.rotation.x = Math.PI/2;
+      rim.position.y = bodyH/2 + taperH;
+
+      // Pull Tab area (simple circle)
+      const lidGeo = new THREE.CircleGeometry(r*0.75, 32);
+      const lid = new THREE.Mesh(lidGeo, metalMat);
+      lid.rotation.x = -Math.PI/2;
+      lid.position.y = bodyH/2 + taperH - 0.5;
+
+      const canGroup = new THREE.Group();
+      canGroup.add(body);
+      canGroup.add(bottom);
+      canGroup.add(top);
+      canGroup.add(rim);
+      canGroup.add(lid);
       
-      const rim2 = new THREE.Mesh(rimGeo, canMat);
-      rim2.rotation.y = Math.PI / 2;
-      rim2.position.x = -height / 2;
-      group.add(rim2);
-      
-      // Label text
-      const labelCanvas = document.createElement('canvas');
-      labelCanvas.width = 256; labelCanvas.height = 128;
-      const ctx = labelCanvas.getContext('2d');
-      if (ctx) {
-          ctx.fillStyle = '#e5e5e5'; ctx.fillRect(0,0,256,128);
-          ctx.font = 'bold 30px Arial'; ctx.fillStyle = '#000000'; ctx.fillText('LOT: 24B01', 50, 64);
-      }
-      const labelTex = new THREE.CanvasTexture(labelCanvas);
-      const labelGeo = new THREE.PlaneGeometry(40, 20);
-      const labelMat = new THREE.MeshStandardMaterial({ map: labelTex, transparent: true, polygonOffset: true, polygonOffsetFactor: -1 });
-      const label = new THREE.Mesh(labelGeo, labelMat);
-      label.position.z = radius + 0.1;
-      group.add(label);
+      group.add(canGroup);
   }
   else if (type === ObjectType.MatteBlock) {
       const block = new THREE.Mesh(
@@ -515,34 +599,33 @@ function updateObject(group: THREE.Group, type: ObjectType) {
       group.add(block);
   }
   else if (type === ObjectType.BottleCap) {
-      // Cap lying flat on XY plane (Face up)
-      const radius = dim.w / 2;
-      const height = dim.depth;
+      // High Detail Crown Cap (Standing flat)
+      // Standard crown cap has 21 flutes.
+      const r = dim.w / 2;
+      const h = dim.depth;
       
-      const capGeo = new THREE.CylinderGeometry(radius, radius, height, 64);
-      const capMat = new THREE.MeshStandardMaterial({
-          map: createCapTexture(),
-          color: 0xffffff,
-          roughness: 0.3,
-          metalness: 0.3
+      // We simulate flutes by using a cylinder with 21 segments and a bump map, or physical geometry.
+      // Let's use physical geometry: Cylinder with 42 segments.
+      // Every even vertex at bottom pushed out, every odd pushed in?
+      // Simpler: Just a cylinder with texture for now, but high quality material.
+      
+      const capGeo = new THREE.CylinderGeometry(r, r * 1.05, h, 21);
+      // Create separate materials for top and side to look like painted metal
+      const sideMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.3, metalness: 0.4 });
+      const topMat = new THREE.MeshStandardMaterial({ 
+          map: createCrownCapTexture('#b91c1c'),
+          roughness: 0.3, 
+          metalness: 0.4 
       });
       
-      const cap = new THREE.Mesh(capGeo, capMat);
-      cap.rotation.x = Math.PI / 2; // Face Z
+      const cap = new THREE.Mesh(capGeo, [sideMat, topMat, sideMat]); // Material index: 0:side, 1:top, 2:bottom
+      cap.rotation.x = 0; // Standing flat on XZ if Cylinder defaults to standing on Y?
+      // Cylinder aligns with Y.
+      // We want it flat on XZ plane.
+      // So no rotation needed if we look from side, but usually caps are inspected from top.
+      // Let's leave it aligned to Y axis, so Top view sees the Logo.
+      
       group.add(cap);
-
-      // Ridges (Simulated with simple torus knots or texture? Let's use small cylinders ring)
-      // Actually, let's just make the side texture bumpy using bump map would be better but we don't have external assets.
-      // Let's add physical ridges.
-      const ridgeGeo = new THREE.CylinderGeometry(0.5, 0.5, height, 8);
-      const ridgeMat = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.5 });
-      for(let i=0; i<40; i++) {
-          const angle = (i / 40) * Math.PI * 2;
-          const ridge = new THREE.Mesh(ridgeGeo, ridgeMat);
-          ridge.rotation.x = Math.PI / 2;
-          ridge.position.set(Math.cos(angle) * (radius + 0.2), Math.sin(angle) * (radius + 0.2), 0);
-          group.add(ridge);
-      }
   }
 }
 
