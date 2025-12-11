@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   SimulationState, 
   SensorFormat, 
@@ -6,14 +6,15 @@ import {
   LightType, 
   ObjectType,
   OpticalMetrics,
-  DoctorAdvice
+  DoctorAdvice,
+  ValidationResult
 } from './types';
-import { SENSOR_SPECS } from './constants';
+import { SENSOR_SPECS, OBJECT_DIMS } from './constants';
 import { analyzeSetup } from './services/geminiService';
 import ControlPanel from './components/ControlPanel';
 import SchematicView from './components/SchematicView';
 import SimulatedImage from './components/SimulatedImage';
-import { Play, Grid, MessageSquare, AlertCircle, Eye, Box, Video } from 'lucide-react';
+import { Play, Grid, MessageSquare, AlertCircle, Box, Video, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 
 const App: React.FC = () => {
   // --- STATE ---
@@ -28,7 +29,15 @@ const App: React.FC = () => {
     lightColor: LightColor.White,
     lightIntensity: 60,
     exposureTime: 5000,
-    gain: 0
+    gain: 0,
+    // New Fields
+    backgroundColor: '#050505',
+    objectSpeed: 0,
+    vibrationLevel: 0,
+    roiX: 0.5,
+    roiY: 0.5,
+    roiW: 0.6,
+    roiH: 0.6
   });
 
   const [viewMode, setViewMode] = useState<'schematic' | 'simulation'>('schematic');
@@ -40,39 +49,99 @@ const App: React.FC = () => {
   // --- OPTICAL CALCULATIONS ---
   const metrics = useMemo<OpticalMetrics>(() => {
     const sensor = SENSOR_SPECS[state.sensorFormat];
-    
-    // Magnification = FocalLength / (WorkingDistance - FocalLength)
-    // Simplified thin lens equation: 1/f = 1/do + 1/di
-    // Let's use standard approximation for Machine Vision:
-    // FOV = (Sensor Dimension * Working Distance) / Focal Length
     const fovWidth = (sensor.w * state.workingDistance) / state.focalLength;
     const fovHeight = (sensor.h * state.workingDistance) / state.focalLength;
-    
-    const magnification = sensor.w / fovWidth; // PMAG
-
-    // Depth of Field (Approximation)
-    // DOF ~ (2 * f# * CircleOfConfusion * (M+1)) / (M^2)
-    // Circle of Confusion (CoC) roughly pixel size * 2. 
-    // Assuming 5MP sensor on 2/3" (8.8mm width) -> ~2448px wide -> pixel ~ 3.45um
+    const magnification = sensor.w / fovWidth; 
     const pixelSize = 0.00345; 
     const coc = pixelSize * 2; 
-    
     const dof = (2 * state.aperture * coc) / (magnification * magnification);
+
+    // Calc Motion Blur (Total = Line Speed + Vibration Speed)
+    // 1. Line Speed shift
+    const speedShiftMm = state.objectSpeed * (state.exposureTime / 1000000);
+    
+    // 2. Vibration shift
+    // Assume Level 10 vibration ~ 200mm/s effective random velocity
+    const vibVelocity = state.vibrationLevel * 20; 
+    const vibShiftMm = vibVelocity * (state.exposureTime / 1000000);
+    
+    const totalShiftMm = speedShiftMm + vibShiftMm;
+    const pixelDensity = 2448 / fovWidth; // Assuming 5MP sensor width for density calc
+    const motionBlurPx = totalShiftMm * pixelDensity;
+
+    // Calc Exposure Value (Simplistic brightness ratio)
+    // Base: 5000us, f/2.8, 0dB gain = 1.0
+    const gainFactor = Math.pow(10, state.gain / 20); // Linearize dB
+    const exposureValue = (state.exposureTime / 5000) * (Math.pow(2.8, 2) / Math.pow(state.aperture, 2)) * gainFactor;
 
     return {
       fovWidth,
       fovHeight,
       magnification,
       dof,
-      pixelDensity: 2448 / fovWidth // pixels per mm
+      pixelDensity,
+      motionBlurPx,
+      exposureValue
     };
   }, [state]);
+
+  // --- VALIDATION LOGIC ---
+  const validation = useMemo<ValidationResult>(() => {
+    const res: ValidationResult = {
+      roi: 'good',
+      contrast: 'good',
+      stability: 'good',
+      exposure: 'good'
+    };
+
+    // 1. ROI Check (Is object fully inside ROI?)
+    const objDim = OBJECT_DIMS[state.objectType];
+    const fovW = metrics.fovWidth;
+    const fovH = metrics.fovHeight;
+    // Object size in FOV Percentage
+    const objPctW = objDim.w / fovW;
+    const objPctH = objDim.h / fovH;
+    
+    // Check if object fits in FOV first
+    if (objPctW > 1 || objPctH > 1) {
+       res.roi = 'poor'; // Object larger than FOV
+    } else {
+       // Check if ROI rect covers the object (assuming centered for now)
+       if (state.roiW < objPctW || state.roiH < objPctH) {
+          res.roi = 'poor'; // ROI cuts object
+       } else if (state.roiW > objPctW * 2) {
+          res.roi = 'acceptable'; // ROI too loose
+       }
+    }
+
+    // 2. Stability Check (Based on calculated blur)
+    if (metrics.motionBlurPx > 6) {
+      res.stability = 'poor';
+    } else if (metrics.motionBlurPx > 1) {
+      res.stability = 'acceptable';
+    }
+
+    // 3. Exposure Check
+    if (metrics.exposureValue < 0.25) res.exposure = 'dark';
+    else if (metrics.exposureValue > 4.0) res.exposure = 'bright';
+    else if (metrics.exposureValue < 0.5 || metrics.exposureValue > 2.0) res.exposure = 'good'; // Actually lets say acceptable range 0.5 - 2.0
+    
+    // 4. Contrast Check (Simulated)
+    const bg = state.backgroundColor;
+    const obj = state.objectType;
+    const isDarkBg = bg === '#050505' || bg === '#064e3b' || bg === '#1e3a8a';
+    
+    if (obj === ObjectType.PCB && isDarkBg) res.contrast = 'poor';
+    if (obj === ObjectType.MetalPart && bg === '#475569') res.contrast = 'poor'; // Gray on Gray
+    if (obj === ObjectType.Packaging && !isDarkBg) res.contrast = 'poor'; // White on White
+
+    return res;
+  }, [state, metrics]);
+
 
   // --- HANDLERS ---
   const handleStateChange = (updates: Partial<SimulationState>) => {
     setState(prev => ({ ...prev, ...updates }));
-    // Reset advice when parameters change significantly? 
-    // No, keep it until they ask again, or maybe show it's stale.
   };
 
   const handleAnalyze = async () => {
@@ -81,6 +150,12 @@ const App: React.FC = () => {
     const result = await analyzeSetup(state, metrics);
     setAdvice(result);
     setIsAnalyzing(false);
+  };
+
+  const getStatusIcon = (status: string) => {
+    if (status === 'good') return <CheckCircle size={16} className="text-emerald-500" />;
+    if (status === 'acceptable') return <AlertTriangle size={16} className="text-yellow-500" />;
+    return <XCircle size={16} className="text-red-500" />;
   };
 
   // --- RENDER ---
@@ -159,6 +234,39 @@ const App: React.FC = () => {
               viewType={simulationViewType}
             />
           )}
+
+          {/* Automatic Validation Panel */}
+          {viewMode === 'simulation' && simulationViewType === 'camera' && (
+             <div className="absolute bottom-4 left-4 z-20 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-lg p-3 shadow-xl pointer-events-none">
+                <div className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Scenario Check</div>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                   <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-300">Framing (ROI)</span>
+                      <div className="flex items-center gap-1 capitalize text-xs">
+                        {getStatusIcon(validation.roi)} {validation.roi}
+                      </div>
+                   </div>
+                   <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-300">Stability</span>
+                      <div className="flex items-center gap-1 capitalize text-xs">
+                        {getStatusIcon(validation.stability)} {validation.stability}
+                      </div>
+                   </div>
+                   <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-300">Contrast</span>
+                      <div className="flex items-center gap-1 capitalize text-xs">
+                        {getStatusIcon(validation.contrast)} {validation.contrast}
+                      </div>
+                   </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-300">Exposure</span>
+                      <div className="flex items-center gap-1 capitalize text-xs">
+                        {validation.exposure === 'good' ? getStatusIcon('good') : getStatusIcon('poor')} {validation.exposure}
+                      </div>
+                   </div>
+                </div>
+             </div>
+          )}
         </div>
 
         {/* Floating Doctor Panel */}
@@ -180,7 +288,7 @@ const App: React.FC = () => {
             <div className="p-4 overflow-y-auto">
               {!advice ? (
                 <div className="text-center py-8 text-slate-400 text-sm">
-                  <p>Click "Analyze Setup" to generate a report.</p>
+                  <p>Click "Ask Doctor AI" to generate a report.</p>
                 </div>
               ) : (
                 <div className="space-y-4">

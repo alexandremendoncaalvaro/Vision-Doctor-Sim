@@ -7,7 +7,7 @@ import {
   SimulationState 
 } from '../types';
 import { STANDARD_FOCAL_LENGTHS, STANDARD_APERTURES, OBJECT_GOALS } from '../constants';
-import { Sliders, Camera, Lightbulb, Box, Eye, Activity, Target, RotateCw } from 'lucide-react';
+import { Camera, Lightbulb, Box, Activity, Target, RotateCw, Wind, Palette, Scan, Signal } from 'lucide-react';
 
 interface ControlPanelProps {
   state: SimulationState;
@@ -22,8 +22,16 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
     onChange({ [key]: value });
   };
 
+  const backgroundOptions = [
+    { name: 'Dark', value: '#050505' },
+    { name: 'Gray', value: '#475569' },
+    { name: 'White', value: '#f1f5f9' },
+    { name: 'Blue', value: '#1e3a8a' },
+    { name: 'Green', value: '#064e3b' },
+  ];
+
   return (
-    <div className="flex flex-col h-full bg-slate-900 border-r border-slate-700 overflow-y-auto">
+    <div className="flex flex-col h-full bg-slate-900 border-r border-slate-700 overflow-y-auto custom-scrollbar">
       <div className="p-4 border-b border-slate-700 bg-slate-900 sticky top-0 z-10">
         <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2">
           <Activity className="text-blue-500" />
@@ -32,7 +40,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
         <p className="text-xs text-slate-400 mt-1">Industrial Optical Simulator</p>
       </div>
 
-      <div className="p-4 space-y-8">
+      <div className="p-4 space-y-8 pb-20">
         
         {/* Object Selection */}
         <section className="space-y-3">
@@ -134,14 +142,13 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
                onChange={(e) => handleChange('cameraAngle', Number(e.target.value))}
                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
              />
-             <div className="text-[10px] text-slate-500 text-right">Tilt to reduce glare</div>
           </div>
         </section>
 
-        {/* Lighting */}
+        {/* Lighting & Exposure */}
         <section className="space-y-4">
            <div className="flex items-center gap-2 text-slate-300 font-medium">
-            <Lightbulb size={16} /> Illumination
+            <Lightbulb size={16} /> Light & Exposure
           </div>
           
           <div className="grid grid-cols-2 gap-3">
@@ -172,7 +179,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
           </div>
 
           <div className="space-y-1">
-             <label className="text-xs text-slate-500">Intensity ({state.lightIntensity}%)</label>
+             <label className="text-xs text-slate-500">Light Intensity ({state.lightIntensity}%)</label>
              <input 
                type="range" 
                min="0" 
@@ -181,6 +188,104 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
                onChange={(e) => handleChange('lightIntensity', Number(e.target.value))}
                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
              />
+          </div>
+
+          <div className="space-y-1">
+             <label className="text-xs text-slate-500">Exposure Time ({state.exposureTime}µs)</label>
+             <input 
+               type="range" 
+               min="100" 
+               max="20000" 
+               step="100"
+               value={state.exposureTime}
+               onChange={(e) => handleChange('exposureTime', Number(e.target.value))}
+               className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+             />
+          </div>
+
+          <div className="space-y-1">
+             <label className="text-xs text-slate-500 flex items-center gap-1"><Signal size={10} /> Sensor Gain ({state.gain}dB)</label>
+             <input 
+               type="range" 
+               min="0" 
+               max="24" 
+               step="1"
+               value={state.gain}
+               onChange={(e) => handleChange('gain', Number(e.target.value))}
+               className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-pink-500"
+             />
+          </div>
+        </section>
+
+        {/* Environment & Motion */}
+        <section className="space-y-4">
+           <div className="flex items-center gap-2 text-slate-300 font-medium">
+            <Wind size={16} /> Environment
+          </div>
+
+          <div className="space-y-1">
+             <label className="text-xs text-slate-500 flex items-center gap-1">
+                <Palette size={10} /> Background
+             </label>
+             <div className="flex gap-2">
+                {backgroundOptions.map((bg) => (
+                  <button
+                    key={bg.value}
+                    onClick={() => handleChange('backgroundColor', bg.value)}
+                    className={`w-6 h-6 rounded-full border border-slate-600 ${state.backgroundColor === bg.value ? 'ring-2 ring-blue-500' : ''}`}
+                    style={{ backgroundColor: bg.value }}
+                    title={bg.name}
+                  />
+                ))}
+             </div>
+          </div>
+
+          <div className="space-y-1">
+             <label className="text-xs text-slate-500">Line Speed ({state.objectSpeed} mm/s)</label>
+             <input 
+               type="range" 
+               min="0" 
+               max="2000" 
+               step="50"
+               value={state.objectSpeed}
+               onChange={(e) => handleChange('objectSpeed', Number(e.target.value))}
+               className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500"
+             />
+          </div>
+
+          <div className="space-y-1">
+             <label className="text-xs text-slate-500">Vibration Level ({state.vibrationLevel}/10)</label>
+             <input 
+               type="range" 
+               min="0" 
+               max="10" 
+               step="1"
+               value={state.vibrationLevel}
+               onChange={(e) => handleChange('vibrationLevel', Number(e.target.value))}
+               className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+             />
+          </div>
+
+           <div className="space-y-1">
+             <label className="text-xs text-slate-500 flex items-center gap-1"><Scan size={10} /> ROI Size</label>
+             <div className="flex gap-2">
+                <input 
+                 type="range" 
+                 min="0.1" max="1" step="0.05"
+                 value={state.roiW}
+                 title="Width"
+                 onChange={(e) => handleChange('roiW', Number(e.target.value))}
+                 className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+               />
+               <input 
+                 type="range" 
+                 min="0.1" max="1" step="0.05"
+                 value={state.roiH}
+                 title="Height"
+                 onChange={(e) => handleChange('roiH', Number(e.target.value))}
+                 className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+               />
+             </div>
           </div>
         </section>
 
@@ -194,9 +299,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
              {isAnalyzing ? (
                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
              ) : (
-               <Eye size={18} />
+               <div className="flex items-center gap-2">
+                 <span>Ask Doctor AI</span>
+               </div>
              )}
-             Analyze Setup
           </button>
         </div>
 
