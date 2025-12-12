@@ -92,7 +92,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
             // Standard Ring is on Camera Axis. Low Angle Ring (Dark Field) is different.
             return [LightPosition.Camera, LightPosition.LowAngle];
           case LightFixture.Bar:
-            return [LightPosition.Back, LightPosition.Top, LightPosition.Side, LightPosition.LowAngle];
+            // Bar lights are Directional. 
+            // Backlight is removed (Panel is better). 
+            // Camera Axis is removed (Impossible physically for a bar to be coaxial).
+            return [LightPosition.Top, LightPosition.Side, LightPosition.LowAngle];
           case LightFixture.Coaxial:
             return [LightPosition.Camera];
           case LightFixture.Spot:
@@ -472,8 +475,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
              </div>
              <input 
                type="range" 
-               min="0" 
-               max="45" 
+               min="-90" 
+               max="90" 
                step="1"
                value={state.cameraAngle}
                onChange={(e) => handleChange('cameraAngle', Number(e.target.value))}

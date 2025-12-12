@@ -311,6 +311,16 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
 
     const angleRad = (state.cameraAngle * Math.PI) / 180;
     
+    // Prevent Gimbal Lock at 90/-90 degrees
+    // Standard lookAt fails if up vector and view vector are parallel.
+    if (Math.abs(state.cameraAngle) > 89.9) {
+         cameraRef.current.up.set(0, 0, -1);
+         camModelRef.current.up.set(0, 0, -1);
+    } else {
+         cameraRef.current.up.set(0, 1, 0);
+         camModelRef.current.up.set(0, 1, 0);
+    }
+    
     const camY = targetY + (state.workingDistance * Math.sin(angleRad));
     const camZ = state.workingDistance * Math.cos(angleRad);
     

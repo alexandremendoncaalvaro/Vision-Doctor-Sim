@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
-import { SimulationState, OpticalMetrics, LightFixture, LightPosition, LightColor, Language, GlobalEnv } from '../types';
-import { SENSOR_SPECS, OBJECT_DIMS } from '../constants';
+import React, { useMemo } from 'react';
+import { SimulationState, OpticalMetrics, LightFixture, LightPosition, LightColor, Language, GlobalEnv, LightConfig } from '../types';
+import { OBJECT_DIMS } from '../constants';
 import { TEXTS } from '../translations';
-import { RectangleHorizontal, RectangleVertical } from 'lucide-react';
 
 interface SchematicViewProps {
   state: SimulationState;
@@ -11,280 +10,516 @@ interface SchematicViewProps {
 }
 
 const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics, language }) => {
-  const [isVertical, setIsVertical] = useState(false);
   const t = TEXTS[language];
 
-  // Scaling factor for drawing to fit SVG
-  const MAX_WIDTH_MM = 1200;
+  // --- 1. SETUP CANVAS ---
+  const VIEW_W = 800;
+  const VIEW_H = 600;
+  const CENTER_X = VIEW_W / 2;
+  const CENTER_Y = VIEW_H / 2;
+
+  // --- 2. CALCULATE POSITIONS (LOGICAL MM) ---
   
-  // ViewBox Dimensions based on orientation
-  const VIEWBOX_W = isVertical ? 500 : 800;
-  const VIEWBOX_H = isVertical ? 900 : 400;
+  // Camera is conceptually at 180 degrees (Left) when Angle is 0.
+  // We subtract the camera angle to rotate "up" or "down" from the left side.
+  const camBaseAngleRad = Math.PI; // 180 degrees
+  const camUserAngleRad = (state.cameraAngle * Math.PI) / 180;
+  const totalCamAngle = camBaseAngleRad + camUserAngleRad;
 
-  const scale = (val: number) => (val / MAX_WIDTH_MM) * 800; // Base scale on horizontal width
+  const camX = state.workingDistance * Math.cos(totalCamAngle);
+  const camY = state.workingDistance * Math.sin(totalCamAngle);
+
+  // --- LIGHTING POSITION LOGIC (POLAR) ---
+  // Everything is calculated relative to Object Center (0,0)
   
-  // Logical Center (Drawing Coords are always Horizontal initially)
-  // We draw in a 800x400 space, then transform it.
-  const LOGICAL_W = 800;
-  const LOGICAL_H = 400;
-  const centerlineY = LOGICAL_H / 2;
-  const objectX = LOGICAL_W * 0.75; 
+  let lightX = 0;
+  let lightY = 0;
+  let lightRot = 0; // Rotation of the fixture graphic
+  let showLight = true;
 
-  // Dimensions
-  const sensorH = scale(SENSOR_SPECS[state.sensorFormat].h * 10);
-  const objectPhysH = OBJECT_DIMS[state.objectType].h;
-  const objectH = scale(objectPhysH);
+  const lightDist = state.lightDistance || 200;
 
-  const distToLens = scale(state.workingDistance);
-  const distToSensor = distToLens + scale(state.focalLength * 2);
-  
-  const lensLocalX = -distToLens;
-  const sensorLocalX = -distToSensor;
+  // Helper to place light at specific angle
+  const placeLight = (degrees: number) => {
+      const rad = (degrees * Math.PI) / 180;
+      lightX = lightDist * Math.cos(rad);
+      lightY = lightDist * Math.sin(rad);
+      // The fixture should point TO the center (0,0)
+      // So its rotation is angle + 180 degrees (since 0 rotation usually points right +X)
+      lightRot = degrees + 180;
+  };
 
-  const getLightColorHex = (c: LightColor) => {
+  if (state.lightPosition === LightPosition.Back) {
+      // Backlight: BEHIND object (Right side, 0 degrees)
+      placeLight(0);
+  } else if (state.lightPosition === LightPosition.Top) {
+      // Top: Above object (-90 degrees)
+      placeLight(-90);
+  } else if (state.lightPosition === LightPosition.Side) {
+      // Side: 2D representation. 
+      // To avoid overlapping Camera (Left) or Top (-90), we use -45 (Top-Right Oblique).
+      // This is a standard way to represent "Side" in a 2D elevation diagram.
+      placeLight(-45);
+  } else if (state.lightPosition === LightPosition.Camera) {
+      // Camera Axis
+      const camDeg = (totalCamAngle * 180) / Math.PI;
+      placeLight(camDeg);
+      
+      // Hide if attached to camera
+      if (Math.abs(state.workingDistance - lightDist) < 50 && state.lightType !== LightFixture.Spot) {
+          showLight = false; 
+      }
+  } else if (state.lightPosition === LightPosition.LowAngle) {
+      // Centered 
+      lightX = 0;
+      lightY = 0;
+      showLight = true; 
+  } else if (state.lightPosition === LightPosition.Surrounding) {
+      lightX = 0;
+      lightY = 0;
+  }
+
+  // --- 3. STABILIZED SCALE LOGIC ---
+  const scale = useMemo(() => {
+    const BASE_RADIUS_MM = 600; 
+
+    const requiredRadius = Math.max(
+        state.workingDistance + 150, 
+        (state.lightDistance || 0) + 150,
+        300 
+    );
+
+    const effectiveRadius = Math.max(BASE_RADIUS_MM, requiredRadius);
+    const minScreenDim = Math.min(VIEW_W, VIEW_H);
+    
+    return (minScreenDim / 2) / effectiveRadius; 
+  }, [state.workingDistance, state.lightDistance]);
+
+  const px = (mm: number) => mm * scale;
+
+  // Object Dimensions (MM)
+  const objDim = OBJECT_DIMS[state.objectType];
+
+  // --- COLORS ---
+  const getLightColor = (c: LightColor) => {
     switch(c) {
-        case LightColor.Red: return "#ef4444";
+        case LightColor.Red: return "#ef4444"; 
         case LightColor.Blue: return "#3b82f6";
-        case LightColor.IR: return "#a8a29e";
+        case LightColor.IR: return "#94a3b8";
         case LightColor.UV: return "#a855f7";
         default: return "#facc15"; 
     }
   };
-  const lightColorHex = getLightColorHex(state.lightColor);
+  const lightColorHex = getLightColor(state.lightColor);
 
-  // --- RENDERING HELPERS ---
-  
-  // Wrapper for Text that counter-rotates if view is Vertical
-  const Label: React.FC<React.SVGProps<SVGTextElement>> = (props) => {
-    const { x, y, transform, ...rest } = props;
-    // If Vertical, we rotated the whole scene 90deg.
-    // To keep text upright, we rotate it -90deg around its own anchor (x,y).
-    const rotation = isVertical ? `rotate(-90 ${x} ${y})` : '';
-    return <text x={x} y={y} transform={`${transform || ''} ${rotation}`} {...rest} />;
+  // --- RENDERERS ---
+
+  const strokeProps = {
+      vectorEffect: "non-scaling-stroke",
+      strokeWidth: 1.5
   };
 
-  const renderCameraAttachedLights = () => {
-     // Only render if position is Camera
-     if (state.lightPosition !== LightPosition.Camera) return null;
+  const DimensionLine = ({ x1, y1, x2, y2, label, offset = 20, color = "#64748b" }: any) => {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.sqrt(dx*dx + dy*dy);
+      if (len < 10) return null; 
 
-     if (state.lightType === LightFixture.Ring) {
-        const ringX = lensLocalX + 10;
-        const ringRadius = 40;
-        return (
+      const ux = dx / len;
+      const uy = dy / len;
+      const nx = -uy;
+      const ny = ux;
+      
+      const ox = nx * offset;
+      const oy = ny * offset;
+
+      let angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
+      if (angleDeg > 90 || angleDeg < -90) {
+          angleDeg += 180;
+      }
+
+      return (
           <g>
-             <rect x={ringX} y={-ringRadius - 10} width={10} height={20} fill="#334155" stroke="#94a3b8" />
-             <circle cx={ringX + 5} cy={-ringRadius} r={4} fill={lightColorHex} />
-             <rect x={ringX} y={ringRadius - 10} width={10} height={20} fill="#334155" stroke="#94a3b8" />
-             <circle cx={ringX + 5} cy={ringRadius} r={4} fill={lightColorHex} />
-             <path 
-               d={`M ${ringX+5} ${-ringRadius} L 0 ${-objectH/2} L 0 ${objectH/2} L ${ringX+5} ${ringRadius} Z`} 
-               fill={lightColorHex} 
-               fillOpacity="0.1" 
-             />
+              <line x1={x1 + ox} y1={y1 + oy} x2={x2 + ox} y2={y2 + oy} stroke={color} strokeWidth="1" />
+              <line x1={x1} y1={y1} x2={x1 + ox} y2={y1 + oy} stroke={color} strokeWidth="1" opacity="0.3" strokeDasharray="4,4"/>
+              <line x1={x2} y1={y2} x2={x2 + ox} y2={y2 + oy} stroke={color} strokeWidth="1" opacity="0.3" strokeDasharray="4,4"/>
+              
+              <g transform={`translate(${(x1+x2)/2 + ox}, ${(y1+y2)/2 + oy}) rotate(${angleDeg})`}>
+                  <rect x="-25" y="-8" width="50" height="16" fill="#0f172a" rx="4" opacity="0.9" />
+                  <text x="0" y="4" fill="#cbd5e1" fontSize="10" textAnchor="middle" fontWeight="500">{label}</text>
+              </g>
           </g>
-        );
-     }
-     if (state.lightType === LightFixture.Coaxial) {
-        const coaxX = lensLocalX - 25;
-        const coaxY = -50;
-        return (
+      );
+  };
+
+  const renderAngleIndicator = () => {
+      if (Math.abs(state.cameraAngle) < 1) return null;
+
+      const r = px(100); 
+      const startRad = Math.PI;
+      const endRad = startRad + camUserAngleRad;
+      
+      const x1 = CENTER_X + r * Math.cos(startRad);
+      const y1 = CENTER_Y + r * Math.sin(startRad);
+      const x2 = CENTER_X + r * Math.cos(endRad);
+      const y2 = CENTER_Y + r * Math.sin(endRad);
+      
+      const largeArc = Math.abs(camUserAngleRad) > Math.PI ? 1 : 0;
+      const sweep = camUserAngleRad > 0 ? 1 : 0;
+
+      return (
           <g>
-            <rect x={coaxX} y={coaxY} width={30} height={50} fill="#334155" stroke="#94a3b8" />
-            <rect x={coaxX + 5} y={coaxY + 5} width={20} height={10} fill={lightColorHex} />
-            <line x1={coaxX} y1={-20} x2={coaxX + 30} y2={-50} stroke="#94a3b8" strokeWidth="1" />
-            <path d={`M ${coaxX + 15} ${coaxY + 10} L ${coaxX + 15} 0 L 0 0`} stroke={lightColorHex} strokeDasharray="5,5" strokeOpacity="0.8" fill="none" />
-            <Label x={coaxX + 15} y={coaxY - 10} fill={lightColorHex} fontSize="12" textAnchor="middle">{t.schCoaxial}</Label>
+              <path d={`M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} ${sweep} ${x2} ${y2}`} fill="none" stroke="#eab308" strokeWidth="1" strokeDasharray="4,2"/>
+              <text x={x2 + (sweep ? 10 : -10)} y={y2 + (sweep ? 10 : -10)} fill="#eab308" fontSize="10">{state.cameraAngle}°</text>
           </g>
-        );
-     }
-     return null;
+      );
   };
 
-  const renderFixedLights = () => {
-    // Render lights that are NOT attached to camera (World fixed relative to object)
-    if (state.lightPosition === LightPosition.Camera) return null;
+  const renderFOV = () => {
+      const cx = CENTER_X + px(camX);
+      const cy = CENTER_Y + px(camY);
+      const tx = CENTER_X;
+      const ty = CENTER_Y;
+      
+      const vx = tx - cx;
+      const vy = ty - cy;
+      const dist = Math.sqrt(vx*vx + vy*vy);
+      if (dist < 1) return null;
 
-    if (state.lightPosition === LightPosition.Back) {
-        return (
-          <g transform={`translate(${objectX}, ${centerlineY})`}>
-            <rect x={20} y={-scale(150)} width={10} height={scale(300)} fill={lightColorHex} fillOpacity="0.8" stroke={lightColorHex}/>
-            <path d="M 20 -50 L 0 -20" stroke={lightColorHex} strokeDasharray="4,4" />
-            <path d="M 20 50 L 0 20" stroke={lightColorHex} strokeDasharray="4,4" />
-            <Label x={35} y={0} fill={lightColorHex} fontSize="12" textAnchor="start" dominantBaseline="middle">{t.schBacklight}</Label>
-          </g>
-        );
-    }
-    
-    if (state.lightPosition === LightPosition.LowAngle) {
-         const laRadius = 70;
-         return (
-          <g transform={`translate(${objectX}, ${centerlineY})`}>
-             <rect x={-30} y={-laRadius - 5} width={10} height={15} fill="#334155" stroke="#94a3b8" />
-             <circle cx={-25} cy={-laRadius + 2} r={4} fill={lightColorHex} />
-             <rect x={-30} y={laRadius - 10} width={10} height={15} fill="#334155" stroke="#94a3b8" />
-             <circle cx={-25} cy={laRadius - 2} r={4} fill={lightColorHex} />
-             <line x1={-25} y1={-laRadius + 2} x2={0} y2={-5} stroke={lightColorHex} strokeWidth="2" strokeOpacity="0.6" />
-             <line x1={-25} y1={laRadius - 2} x2={0} y2={5} stroke={lightColorHex} strokeWidth="2" strokeOpacity="0.6" />
-             <Label x={-35} y={-laRadius - 15} fill={lightColorHex} fontSize="12" textAnchor="end">{t.schLowAngle}</Label>
-          </g>
-        );
-    }
-
-    if (state.lightPosition === LightPosition.Top) {
-        return (
-          <g transform={`translate(${objectX}, ${centerlineY})`}>
-             <rect x={-50} y={-150} width={100} height={10} fill="#334155" stroke={lightColorHex} />
-             <line x1={-40} y1={-140} x2={0} y2={-objectH/2} stroke={lightColorHex} strokeDasharray="4,4" />
-             <line x1={40} y1={-140} x2={0} y2={-objectH/2} stroke={lightColorHex} strokeDasharray="4,4" />
-             <Label x={0} y={-160} fill={lightColorHex} fontSize="12" textAnchor="middle">Top Light</Label>
-          </g>
-        );
-    }
-
-    // Side lights difficult to visualize in side profile if coming from Z axis, 
-    // but if coming from Y axis (up/down in image), they are just Top/Bottom?
-    // Let's assume Side is perpendicular to this view, maybe draw a circle with an X?
-    if (state.lightPosition === LightPosition.Side) {
-         return (
-          <g transform={`translate(${objectX}, ${centerlineY})`}>
-             <circle cx={0} cy={-objectH/2 - 50} r={10} fill="none" stroke={lightColorHex} />
-             <text x={0} y={-objectH/2 - 47} textAnchor="middle" fontSize="10" fill={lightColorHex}>Side</text>
-             {/* Abstract rays */}
-             <line x1={0} y1={-objectH/2 - 40} x2={0} y2={-objectH/2} stroke={lightColorHex} strokeDasharray="2,2"/>
-          </g>
-         );
-    }
-    
-    return null;
+      const ux = vx / dist;
+      const uy = vy / dist;
+      const px_vec = -uy;
+      const py_vec = ux;
+      
+      const halfFov = px(metrics.fovWidth / 2);
+      
+      const t1x = tx + px_vec * halfFov;
+      const t1y = ty + py_vec * halfFov;
+      const t2x = tx - px_vec * halfFov;
+      const t2y = ty - py_vec * halfFov;
+      
+      return (
+          <path d={`M ${cx} ${cy} L ${t1x} ${t1y} L ${t2x} ${t2y} Z`} fill={lightColorHex} fillOpacity="0.05" stroke="none" />
+      );
   };
 
-  // Main Scene Transform
-  const rootTransform = isVertical 
-    ? `translate(${VIEWBOX_W/2}, 50) rotate(90) translate(0, -${centerlineY})` 
-    : ``;
+  const renderCameraGroup = () => {
+      const txtSize = 12 / scale;
+      return (
+          <g transform={`translate(${CENTER_X + px(camX)}, ${CENTER_Y + px(camY)}) rotate(${state.cameraAngle}) scale(${scale})`}>
+              <path d="M 0 -15 L -10 -20 L -25 -20 L -25 20 L -10 20 L 0 15 Z" fill="#334155" stroke="#94a3b8" {...strokeProps} />
+              <line x1="-18" y1="-18" x2="-18" y2="18" stroke="#475569" {...strokeProps} />
+              <rect x="-65" y="-25" width="40" height="50" fill="#1e293b" stroke="#64748b" rx="4" {...strokeProps} />
+              <line x1="-55" y1="-20" x2="-55" y2="20" stroke="#10b981" {...strokeProps} strokeWidth={3} />
+              <text 
+                  x="-45" y="-35" 
+                  fill="#94a3b8" 
+                  fontSize={txtSize}
+                  textAnchor="middle" 
+                  transform={`rotate(${-state.cameraAngle}, -45, -35)`}
+              >
+                  Camera
+              </text>
+              
+              {!showLight && state.lightPosition === LightPosition.Camera && (
+                  <>
+                      {state.lightType === LightFixture.Ring && (
+                          <g>
+                              <rect x="-5" y="-30" width="10" height="10" fill="#334155" stroke={lightColorHex} {...strokeProps}/>
+                              <rect x="-5" y="20" width="10" height="10" fill="#334155" stroke={lightColorHex} {...strokeProps}/>
+                              <circle cx="0" cy="-25" r="3" fill={lightColorHex} {...strokeProps}/>
+                              <circle cx="0" cy="25" r="3" fill={lightColorHex} {...strokeProps}/>
+                          </g>
+                      )}
+                      {state.lightType === LightFixture.Coaxial && (
+                          <g transform="translate(15, -30)">
+                              <rect x="0" y="0" width="20" height="20" fill="#1e293b" stroke={lightColorHex} {...strokeProps}/>
+                              <line x1="0" y1="0" x2="20" y2="20" stroke={lightColorHex} strokeDasharray="4,4" {...strokeProps}/>
+                              <text 
+                                  x="10" y="-5" 
+                                  fill={lightColorHex} 
+                                  fontSize={txtSize * 0.8} 
+                                  textAnchor="middle" 
+                                  transform={`rotate(${-state.cameraAngle}, 10, -5)`}
+                              >
+                                  Coax
+                              </text>
+                          </g>
+                      )}
+                  </>
+              )}
+          </g>
+      );
+  };
+
+  const renderLightGroup = () => {
+      if (!showLight) return null;
+      
+      const txtSize = 12 / scale;
+
+      // Special Case: Low Angle (Centered)
+      if (state.lightPosition === LightPosition.LowAngle) {
+          const r_mm = (objDim.w / 2) + 20; 
+          
+          if (state.lightType === LightFixture.Ring) {
+             return (
+              <g transform={`translate(${CENTER_X}, ${CENTER_Y}) scale(${scale})`}>
+                  <circle cx="0" cy="0" r={r_mm} fill="none" stroke={lightColorHex} strokeDasharray="4,4" {...strokeProps}/>
+                  <text x="0" y={r_mm + 20} fill={lightColorHex} fontSize={txtSize} textAnchor="middle">Low Angle Ring</text>
+                  {[0, 45, 90, 135, 180, 225, 270, 315].map(deg => (
+                      <g key={deg} transform={`rotate(${deg})`}>
+                         <line x1={r_mm} y1="0" x2={objDim.w/2} y2="0" stroke={lightColorHex} opacity="0.5" strokeDasharray="2,2" {...strokeProps} />
+                         <path d={`M ${objDim.w/2 + 5} -2 L ${objDim.w/2} 0 L ${objDim.w/2 + 5} 2`} fill={lightColorHex} stroke="none" />
+                      </g>
+                  ))}
+              </g>
+            );
+          }
+          
+          if (state.lightType === LightFixture.Bar) {
+              // Low Angle Bar: Usually placed flat on table, surrounding object.
+              // In this view, we'll place them at compass points pointing IN.
+              const angles = [];
+              if (state.lightConfig === LightConfig.Single) angles.push(-90); // Top (looking down from top of diagram)
+              else if (state.lightConfig === LightConfig.Dual) { angles.push(-90); angles.push(90); } // Top/Bottom
+              else { angles.push(0); angles.push(90); angles.push(180); angles.push(270); } // Quad
+
+              return (
+                  <g transform={`translate(${CENTER_X}, ${CENTER_Y}) scale(${scale})`}>
+                       {angles.map(ang => (
+                           <g key={ang} transform={`rotate(${ang}) translate(${r_mm}, 0)`}>
+                               {/* Bar Shape: Rect pointing IN */}
+                               {/* Face is at x=0 (relative to translation). Body is behind (x>0 since we rotated) */}
+                               {/* No, translate moves it out to radius. We want it pointing to center. */}
+                               {/* At angle 0 (Right), translate(r,0) puts it at right. We want face at left. Rotation 180? */}
+                               {/* Simpler: Rotate the group to the angle, translate out. Then draw bar facing -X */}
+                               <rect x="0" y="-15" width="10" height="30" fill="#334155" stroke={lightColorHex} {...strokeProps} />
+                               <line x1="0" y1="-10" x2="0" y2="10" stroke={lightColorHex} strokeWidth="2" vectorEffect="non-scaling-stroke"/>
+                               
+                               {/* Rays pointing to center (-X direction) */}
+                               <line x1="0" y1="0" x2={-(r_mm - objDim.w/2)} y2="0" stroke={lightColorHex} strokeDasharray="2,2" opacity="0.5" {...strokeProps}/>
+                               <path d={`M ${-(r_mm - objDim.w/2) + 5} -2 L ${-(r_mm - objDim.w/2)} 0 L ${-(r_mm - objDim.w/2) + 5} 2`} fill={lightColorHex} stroke="none" />
+                           </g>
+                       ))}
+                       <text x="0" y={r_mm + 35} fill={lightColorHex} fontSize={txtSize} textAnchor="middle">Low Angle Bar ({state.lightConfig})</text>
+                  </g>
+              );
+          }
+      }
+      
+      // Special Case: Dome/Tunnel (Surrounding)
+      if (state.lightPosition === LightPosition.Surrounding) {
+           const r_mm = state.lightDistance || 200;
+           return (
+              <g transform={`translate(${CENTER_X}, ${CENTER_Y}) scale(${scale})`}>
+                  <circle cx="0" cy="0" r={r_mm} fill={lightColorHex} fillOpacity="0.05" stroke={lightColorHex} strokeDasharray="8,8" {...strokeProps}/>
+                  <text x="0" y={-r_mm - 10} fill={lightColorHex} fontSize={txtSize} textAnchor="middle">Dome / Tunnel</text>
+                  {[0, 90, 180, 270].map(deg => (
+                      <g key={deg} transform={`rotate(${deg})`}>
+                          <line x1={r_mm} y1="0" x2={r_mm - 30} y2="0" stroke={lightColorHex} strokeDasharray="2,2" {...strokeProps}/>
+                          <path d={`M ${r_mm-30} -2 L ${r_mm-35} 0 L ${r_mm-30} 2`} fill={lightColorHex} stroke="none" />
+                      </g>
+                  ))}
+              </g>
+           );
+      }
+
+      // --- STANDARD DIRECTIONAL LIGHTS ---
+
+      // SPECIAL DRAWING FOR BAR LIGHT (Side/Top)
+      if (state.lightType === LightFixture.Bar) {
+          return (
+            <g transform={`translate(${CENTER_X + px(lightX)}, ${CENTER_Y + px(lightY)}) rotate(${lightRot}) scale(${scale})`}>
+                {/* Bar Light Shape: Rectangular, emitting face at x=0, body extends backwards (x < 0) */}
+                <rect x="-15" y="-30" width="15" height="60" fill="#334155" stroke={lightColorHex} {...strokeProps} />
+                {/* Emitting Face */}
+                <line x1="0" y1="-28" x2="0" y2="28" stroke={lightColorHex} strokeWidth={3} vectorEffect="non-scaling-stroke"/>
+                
+                {/* Rays - emanating from 0 towards positive X? No, towards Object. */}
+                {/* lightRot is calculated to point towards center. So Rays go +X in local space. */}
+                <g opacity="0.5">
+                    <line x1="0" y1="-20" x2="50" y2="-15" stroke={lightColorHex} strokeDasharray="4,2" {...strokeProps}/>
+                    <line x1="0" y1="20" x2="50" y2="15" stroke={lightColorHex} strokeDasharray="4,2" {...strokeProps}/>
+                    <line x1="0" y1="0" x2="60" y2="0" stroke={lightColorHex} strokeDasharray="4,2" {...strokeProps}/>
+                    {/* Arrow heads */}
+                    <path d="M 50 -15 L 45 -17 L 45 -13 Z" fill={lightColorHex} />
+                    <path d="M 50 15 L 45 13 L 45 17 Z" fill={lightColorHex} />
+                    <path d="M 60 0 L 55 -2 L 55 2 Z" fill={lightColorHex} />
+                </g>
+
+                {/* Label behind the light */}
+                 <text 
+                  x="-20" y="0" 
+                  fill={lightColorHex} 
+                  fontSize={txtSize} 
+                  textAnchor="end" 
+                  dominantBaseline="middle"
+                  transform={`rotate(${-lightRot}, -20, 0)`}
+                >
+                  Bar Light
+                </text>
+            </g>
+          );
+      }
+
+      // GENERIC / SPOT / PANEL
+      let fixtureShape = (
+          <g>
+              <rect x="-20" y="-30" width="20" height="60" fill="#334155" stroke={lightColorHex} {...strokeProps}/>
+              <line x1="0" y1="-25" x2="0" y2="25" stroke={lightColorHex} strokeWidth={4} vectorEffect="non-scaling-stroke"/>
+          </g>
+      );
+
+      if (state.lightType === LightFixture.Panel) {
+          fixtureShape = (
+              <g>
+                  <rect x="-10" y="-50" width="10" height="100" fill="#334155" stroke={lightColorHex} {...strokeProps}/>
+                  <rect x="0" y="-45" width="2" height="90" fill={lightColorHex} />
+              </g>
+          );
+      } else if (state.lightType === LightFixture.Spot) {
+          fixtureShape = (
+              <g>
+                   <path d="M -20 -10 L 0 -15 L 0 15 L -20 10 Z" fill="#334155" stroke={lightColorHex} {...strokeProps}/>
+                   <ellipse cx="0" cy="0" rx="2" ry="15" fill={lightColorHex} />
+              </g>
+          );
+      }
+
+      return (
+          <g transform={`translate(${CENTER_X + px(lightX)}, ${CENTER_Y + px(lightY)}) rotate(${lightRot}) scale(${scale})`}>
+              {fixtureShape}
+
+              <g opacity="0.5">
+                  <line x1="5" y1="-20" x2="60" y2="-15" stroke={lightColorHex} strokeDasharray="4,2" {...strokeProps}/>
+                  <line x1="5" y1="20" x2="60" y2="15" stroke={lightColorHex} strokeDasharray="4,2" {...strokeProps}/>
+                  <line x1="5" y1="0" x2="80" y2="0" stroke={lightColorHex} strokeDasharray="4,2" {...strokeProps}/>
+                  <path d="M 60 -15 L 55 -17 L 55 -13 Z" fill={lightColorHex} />
+                  <path d="M 60 15 L 55 13 L 55 17 Z" fill={lightColorHex} />
+                  <path d="M 80 0 L 75 -2 L 75 2 Z" fill={lightColorHex} />
+              </g>
+              
+              <text 
+                  x="-30" y="0" 
+                  fill={lightColorHex} 
+                  fontSize={txtSize} 
+                  textAnchor="end" 
+                  dominantBaseline="middle"
+                  transform={`rotate(${-lightRot}, -30, 0)`}
+              >
+                  {state.lightType === LightFixture.Panel ? 'Backlight' : 'Light'}
+              </text>
+          </g>
+      );
+  };
+
+  const renderMeasurements = () => {
+      const cx = CENTER_X + px(camX);
+      const cy = CENTER_Y + px(camY);
+      const lx = CENTER_X + px(lightX);
+      const ly = CENTER_Y + px(lightY);
+      
+      const objW_px = px(objDim.w);
+      const objH_px = px(objDim.h);
+      
+      return (
+          <g>
+               {/* Working Distance */}
+               <DimensionLine 
+                   x1={cx} y1={cy} 
+                   x2={CENTER_X} y2={CENTER_Y} 
+                   label={`WD: ${state.workingDistance}mm`} 
+                   offset={40}
+                />
+               
+               {/* Light Distance */}
+               {showLight && state.lightPosition !== LightPosition.Surrounding && state.lightPosition !== LightPosition.LowAngle && (
+                   <DimensionLine 
+                       x1={lx} y1={ly} 
+                       x2={CENTER_X} y2={CENTER_Y} 
+                       label={`L: ${state.lightDistance}mm`} 
+                       offset={-40}
+                       color={lightColorHex}
+                   />
+               )}
+
+               {/* Object Size (Horizontal) */}
+               <DimensionLine 
+                   x1={CENTER_X - objW_px/2} y1={CENTER_Y}
+                   x2={CENTER_X + objW_px/2} y2={CENTER_Y}
+                   label={`Size: ${objDim.w}mm`}
+                   offset={objH_px/2 + 30}
+               />
+
+               {renderAngleIndicator()}
+          </g>
+      );
+  };
 
   return (
-    <div className="w-full h-full flex flex-col">
-      <div className="flex-1 bg-slate-950 relative overflow-auto flex items-center justify-center p-4">
-         
-         {/* Rotate Button */}
-         <button 
-           onClick={() => setIsVertical(!isVertical)}
-           className="absolute top-4 right-4 z-10 bg-slate-800 p-2 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-colors shadow-lg border border-slate-700"
-           title={isVertical ? "Switch to Horizontal View" : "Switch to Vertical View"}
-         >
-           {isVertical ? <RectangleHorizontal size={20} className="text-indigo-400" /> : <RectangleVertical size={20} />}
-         </button>
+    <div className="w-full h-full flex flex-col bg-slate-950">
+      
+      {/* HEADER */}
+      <div className="h-8 border-b border-slate-800 flex items-center justify-between px-4 bg-slate-900/50 text-[10px] text-slate-400">
+         <div className="flex gap-4">
+            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-slate-400"/> {t.schObject}</span>
+            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"/> {t.schCamera}</span>
+            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full" style={{backgroundColor: lightColorHex}}/> {t.sectionLight}</span>
+         </div>
+         <div className="font-mono">
+            {metrics.fovWidth.toFixed(1)} x {metrics.fovHeight.toFixed(1)} mm FOV
+         </div>
+      </div>
 
-         <svg viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className={`max-w-full max-h-full select-none transition-all duration-500`}>
-            {/* Grid Pattern */}
+      {/* CANVAS */}
+      <div className="flex-1 relative overflow-hidden flex items-center justify-center cursor-crosshair">
+         <svg width="100%" height="100%" viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}>
+            
             <defs>
-              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" strokeWidth="1"/>
+              <pattern id="grid" width={px(50)} height={px(50)} patternUnits="userSpaceOnUse">
+                <path d={`M ${px(50)} 0 L 0 0 0 ${px(50)}`} fill="none" stroke="#1e293b" strokeWidth="1"/>
               </pattern>
-              <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
-                <path d="M0,0 L0,6 L9,3 z" fill="#64748b" />
-              </marker>
             </defs>
-            <rect width="100%" height="100%" fill="url(#grid)" />
+            <rect width="100%" height="100%" fill="url(#grid)" opacity="0.3"/>
+            
+            {/* Center Origin Mark & Floor Line */}
+            <g transform={`translate(${CENTER_X}, ${CENTER_Y})`}>
+                 <line x1="-10" y1="0" x2="10" y2="0" stroke="#334155"/>
+                 <line x1="0" y1="-10" x2="0" y2="10" stroke="#334155"/>
+                 {/* Table/Axis Line */}
+                 <line x1="-400" y1="0" x2="400" y2="0" stroke="#334155" strokeWidth="0.5" strokeDasharray="2,2"/>
+            </g>
 
-            {/* --- TRANSFORMED ROOT GROUP --- */}
-            <g transform={rootTransform} className="transition-transform duration-500 ease-in-out">
-              
-              {/* Enclosure Box (Studio Mode Only) */}
-              {state.globalEnv === GlobalEnv.Studio && (
-                  <rect 
-                    x={-50} 
-                    y={-50} 
-                    width={LOGICAL_W} 
-                    height={LOGICAL_H + 100} 
-                    fill="none" 
-                    stroke="#475569" 
-                    strokeWidth="4" 
-                    strokeDasharray="10,5"
-                    rx="10"
-                  />
-              )}
-
-              {/* Optical Axis */}
-              <line x1="0" y1={centerlineY} x2={LOGICAL_W} y2={centerlineY} stroke="#334155" strokeDasharray="5,5" />
-
-              {/* --- ROTATING CAMERA GROUP --- */}
-              {/* Changed rotate(${-state.cameraAngle}) to rotate(${state.cameraAngle}) for UP direction */}
-              <g transform={`translate(${objectX}, ${centerlineY}) rotate(${state.cameraAngle})`}>
-                  
-                  {/* FOV Cone */}
-                  <path 
-                    d={`M ${lensLocalX} 0 L 0 ${-scale(metrics.fovHeight/2)} L 0 ${scale(metrics.fovHeight/2)} Z`} 
-                    fill="rgba(59, 130, 246, 0.1)" 
-                    stroke="#3b82f6" 
-                    strokeWidth="1"
-                  />
-
-                  {/* Camera Body */}
-                  <rect x={sensorLocalX - 30} y={-25} width={30} height={50} fill="#475569" rx="4" />
-                  <Label x={sensorLocalX - 45} y={0} fill="#94a3b8" fontSize="12" textAnchor="middle" dominantBaseline="middle">{t.schCamera}</Label>
-                  
-                  {/* Sensor */}
-                  <line x1={sensorLocalX} y1={-sensorH/2} x2={sensorLocalX} y2={sensorH/2} stroke="#ef4444" strokeWidth="4" />
-
-                  {/* Lens */}
-                  <path d={`M ${lensLocalX-5} -15 L ${lensLocalX+5} 0 L ${lensLocalX-5} 15 Z`} fill="#94a3b8" />
-                  <Label x={lensLocalX} y={-25} fill="#94a3b8" fontSize="12" textAnchor="middle">{t.schLens}</Label>
-                  
-                  {/* Camera Attached Lights */}
-                  {renderCameraAttachedLights()}
-
-                  {/* Axis Line for Camera */}
-                  <line x1={sensorLocalX} y1={0} x2={0} y2={0} stroke="#3b82f6" strokeDasharray="2,2" strokeOpacity="0.5"/>
-              </g>
-
-              {/* --- FIXED ELEMENTS --- */}
-              {renderFixedLights()}
-
-              {/* Object */}
-              <g transform={`translate(${objectX}, ${centerlineY})`}>
-                  <rect 
-                  x={0} 
-                  y={-objectH/2} 
-                  width={10} 
-                  height={objectH} 
-                  fill="#22c55e" 
-                  />
-                  <Label x={20} y={0} fill="#22c55e" fontSize="12" textAnchor="start" dominantBaseline="middle">{t.schObject}</Label>
-              </g>
-              
-              {/* Angle Indicator Arc */}
-              {state.cameraAngle > 0 && (
-                  <g transform={`translate(${objectX}, ${centerlineY})`}>
-                      <path d={`M -100 0 A 100 100 0 0 1 ${-100 * Math.cos(state.cameraAngle * Math.PI/180)} ${-100 * Math.sin(state.cameraAngle * Math.PI/180)}`} fill="none" stroke="#a855f7" strokeWidth="2" />
-                      <Label x={-120} y={-20} fill="#a855f7" fontSize="12">{state.cameraAngle}°</Label>
-                  </g>
-              )}
-
-              {/* Working Distance Marker */}
-              {/* Needs special handling for rotation because it spans distance */}
-              <line x1={objectX + lensLocalX} y1={centerlineY + 60} x2={objectX} y2={centerlineY + 60} stroke="#64748b" markerEnd="url(#arrow)" markerStart="url(#arrow)" />
-              <Label x={objectX + lensLocalX/2} y={centerlineY + 50} fill="#cbd5e1" fontSize="12" textAnchor="middle">{t.schWd}: {state.workingDistance}mm</Label>
+            {renderFOV()}
+            {renderMeasurements()}
+            {renderLightGroup()}
+            {renderCameraGroup()}
+            
+            {/* OBJECT (Physical Coordinates Scaled) */}
+            <g transform={`translate(${CENTER_X}, ${CENTER_Y}) scale(${scale})`}>
+                <rect 
+                    x={-objDim.w/2} y={-objDim.h/2} width={objDim.w} height={objDim.h} 
+                    fill="#cbd5e1" stroke="#475569" {...strokeProps} strokeWidth={2}
+                    transform={`rotate(${state.objectOrientation === 'Side' ? 90 : 0})`}
+                />
+                <text 
+                  x="0" 
+                  y={0} 
+                  fontSize={10/scale} 
+                  fill="#64748b" 
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  opacity="0.5"
+                >
+                  {t.schObject}
+                </text>
             </g>
 
          </svg>
-      </div>
-      
-      {/* Metrics Footer */}
-      <div className="h-16 bg-slate-900 border-t border-slate-700 flex items-center justify-around px-4 text-sm z-20">
-        <div className="text-center">
-          <div className="text-slate-400 text-xs">{t.statFov}</div>
-          <div className="text-blue-400 font-mono">{metrics.fovWidth.toFixed(1)} x {metrics.fovHeight.toFixed(1)} mm</div>
-        </div>
-        <div className="text-center">
-          <div className="text-slate-400 text-xs">{t.statMag}</div>
-          <div className="text-emerald-400 font-mono">{metrics.magnification.toFixed(3)}x</div>
-        </div>
-        <div className="text-center">
-          <div className="text-slate-400 text-xs">{t.statDof}</div>
-          <div className="text-orange-400 font-mono">~{metrics.dof.toFixed(1)} mm</div>
-        </div>
+         
+         <div className="absolute bottom-2 right-2 text-[10px] text-slate-500 font-mono">
+             Grid: 50mm | Scale: {(scale).toFixed(2)}x
+         </div>
       </div>
     </div>
   );
