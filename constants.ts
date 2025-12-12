@@ -1,3 +1,4 @@
+
 import { SensorFormat, ObjectType } from './types';
 
 // Sensor dimensions in mm (Width, Height)
@@ -22,40 +23,27 @@ export const OBJECT_DIMS: Record<ObjectType, { w: number; h: number, depth: numb
   [ObjectType.BottleCap]: { w: 28, h: 28, depth: 6 },
 };
 
+// Curated list of high-coherence goals
 export const OBJECT_GOALS: Record<ObjectType, string[]> = {
   [ObjectType.PCB]: [
-    "Check Solder Bridges (Shorts)",
-    "Verify Component Presence",
     "Read Laser Etched Text (OCR)",
-    "Check Polarity Marks",
-    "Inspect Conformal Coating"
+    "Check Solder Bridges (Shorts)",
+    "Verify Component Presence"
   ],
   [ObjectType.GlassBottle]: [
     "Inspect Fill Level",
-    "Check Cap Seal / Tamper Band",
-    "Read Label Text / Date Code",
-    "Detect Glass Cracks / Inclusions",
-    "Verify Label Alignment"
+    "Read Label Text"
   ],
   [ObjectType.AluminumCan]: [
     "Read Bottom Dot Peen Code",
-    "Inspect Pull Tab Integrity",
-    "Verify Print Quality / Color",
-    "Detect Dents or Scratches",
-    "Check Lid Sealing"
+    "Inspect Pull Tab Integrity"
   ],
   [ObjectType.MatteBlock]: [
-    "Measure Dimensions (Metrology)",
-    "Check Surface Flatness",
-    "Detect Surface Flaws",
-    "Calibrate Robot Coordinate System"
+    "Measure Dimensions (Backlight)",
+    "Check Surface Flatness"
   ],
   [ObjectType.BottleCap]: [
-    "Inspect Liner Seal Integrity",
-    "Verify Logo Print Quality",
-    "Check for Deformed Criminp",
-    "Read Top Print Code"
+    "Read Top Print Code",
+    "Inspect Liner Seal Integrity"
   ]
 };
-
-export const DEFAULT_ADVICE = "Adjust parameters to inspect the object. Click 'Analyze Setup' for AI feedback.";

@@ -34,10 +34,10 @@ export const TEXTS = {
     vibration: "Nível de Vibração",
     roiSize: "Tamanho da ROI",
     
-    analyzeBtn: "Consultar Doctor AI",
-    analyzing: "Analisando...",
+    analyzeBtn: "",
+    analyzing: "",
     autoTune: "Auto-Configurar",
-    autoTuneDesc: "Aplicar configurações recomendadas para este objetivo",
+    autoTuneDesc: "Aplicar configuração recomendada completa para o cenário atual",
 
     objects: {
       "PCB Board": "Placa PCB",
@@ -85,14 +85,14 @@ export const TEXTS = {
     simulator: "Simulador",
     cameraView: "Visão da Câmera",
     freeView: "Visão 3D Livre",
-    toggleDoctor: "Alternar Doctor Advice",
+    toggleDoctor: "",
     
-    reportTitle: "Relatório Dr. Vision",
+    reportTitle: "",
     reportScore: "Adequação",
     reportExcellent: "Excelente",
     reportAcceptable: "Aceitável",
     reportPoor: "Ruim",
-    noReport: "Clique em 'Consultar Doctor AI' para gerar um relatório.",
+    noReport: "",
     scenarioCheck: "Verificação de Cenário",
     
     schCamera: "Câmera",
@@ -152,10 +152,10 @@ export const TEXTS = {
     lineSpeed: "Line Speed",
     vibration: "Vibration Level",
     roiSize: "ROI Size",
-    analyzeBtn: "Ask Doctor AI",
-    analyzing: "Analyzing...",
+    analyzeBtn: "",
+    analyzing: "",
     autoTune: "Auto-Tune",
-    autoTuneDesc: "Apply recommended settings for this goal",
+    autoTuneDesc: "Apply comprehensive recommended configuration",
     objects: {
       "PCB Board": "PCB Board",
       "Glass Bottle (Amber)": "Glass Bottle (Amber)",
@@ -201,13 +201,13 @@ export const TEXTS = {
     simulator: "Simulator",
     cameraView: "Camera View",
     freeView: "Free View",
-    toggleDoctor: "Toggle Doctor Advice",
-    reportTitle: "Dr. Vision's Report",
+    toggleDoctor: "",
+    reportTitle: "",
     reportScore: "Suitability",
     reportExcellent: "Excellent",
     reportAcceptable: "Acceptable",
     reportPoor: "Poor",
-    noReport: "Click 'Ask Doctor AI' to generate a report.",
+    noReport: "",
     scenarioCheck: "Scenario Check",
     schCamera: "Camera",
     schLens: "Lens",
@@ -263,10 +263,10 @@ export const TEXTS = {
     lineSpeed: "Velocidad de Línea",
     vibration: "Nivel de Vibración",
     roiSize: "Tamaño de ROI",
-    analyzeBtn: "Consultar Doctor AI",
-    analyzing: "Analizando...",
+    analyzeBtn: "",
+    analyzing: "",
     autoTune: "Auto-Ajustar",
-    autoTuneDesc: "Aplicar configuraciones recomendadas para este objetivo",
+    autoTuneDesc: "Aplicar configuración completa recomendada",
     objects: {
       "PCB Board": "Placa PCB",
       "Glass Bottle (Amber)": "Botella de Vidrio (Ámbar)",
@@ -312,13 +312,13 @@ export const TEXTS = {
     simulator: "Simulador",
     cameraView: "Vista de Cámara",
     freeView: "Vista Libre 3D",
-    toggleDoctor: "Alternar Doctor Advice",
-    reportTitle: "Informe Dr. Vision",
+    toggleDoctor: "",
+    reportTitle: "",
     reportScore: "Idoneidad",
     reportExcellent: "Excelente",
     reportAcceptable: "Aceptable",
     reportPoor: "Pobre",
-    noReport: "Haga clic en 'Consultar Doctor AI' para generar un informe.",
+    noReport: "",
     scenarioCheck: "Verificación de Escenario",
     schCamera: "Cámara",
     schLens: "Lente",
@@ -348,7 +348,6 @@ export const TEXTS = {
 };
 
 export const GOAL_TRANSLATIONS: Record<string, Record<Language, string>> = {
-  // ... (Goal translations remain unchanged) ...
   // PCB
   "Check Solder Bridges (Shorts)": { 
       "en": "Check Solder Bridges (Shorts)", 
@@ -365,41 +364,16 @@ export const GOAL_TRANSLATIONS: Record<string, Record<Language, string>> = {
       "pt-BR": "Ler Texto Gravado a Laser (OCR)", 
       "es": "Leer Texto Grabado con Láser (OCR)" 
   },
-  "Check Polarity Marks": { 
-      "en": "Check Polarity Marks", 
-      "pt-BR": "Verificar Marcas de Polaridade", 
-      "es": "Verificar Marcas de Polaridad" 
-  },
-  "Inspect Conformal Coating": { 
-      "en": "Inspect Conformal Coating", 
-      "pt-BR": "Inspecionar Revestimento (Conformal Coating)", 
-      "es": "Inspeccionar Recubrimiento (Conformal Coating)" 
-  },
   // Glass Bottle
   "Inspect Fill Level": { 
       "en": "Inspect Fill Level", 
       "pt-BR": "Inspecionar Nível de Enchimento", 
       "es": "Inspeccionar Nivel de Llenado" 
   },
-  "Check Cap Seal / Tamper Band": { 
-      "en": "Check Cap Seal / Tamper Band", 
-      "pt-BR": "Verificar Lacre da Tampa / Banda de Segurança", 
-      "es": "Verificar Sello de la Tapa / Banda de Seguridad" 
-  },
-  "Read Label Text / Date Code": { 
-      "en": "Read Label Text / Date Code", 
-      "pt-BR": "Ler Texto do Rótulo / Data", 
-      "es": "Leer Texto de Etiqueta / Código de Fecha" 
-  },
-  "Detect Glass Cracks / Inclusions": { 
-      "en": "Detect Glass Cracks / Inclusions", 
-      "pt-BR": "Detectar Rachaduras / Inclusões no Vidro", 
-      "es": "Detectar Grietas / Inclusiones en el Vidrio" 
-  },
-  "Verify Label Alignment": { 
-      "en": "Verify Label Alignment", 
-      "pt-BR": "Verificar Alinhamento do Rótulo", 
-      "es": "Verificar Alineación de Etiqueta" 
+  "Read Label Text": { 
+      "en": "Read Label Text", 
+      "pt-BR": "Ler Texto do Rótulo", 
+      "es": "Leer Texto de Etiqueta" 
   },
   // Aluminum Can
   "Read Bottom Dot Peen Code": { 
@@ -412,57 +386,22 @@ export const GOAL_TRANSLATIONS: Record<string, Record<Language, string>> = {
       "pt-BR": "Inspecionar Integridade do Anel de Abertura", 
       "es": "Inspeccionar Integridad de la Anilla" 
   },
-  "Verify Print Quality / Color": { 
-      "en": "Verify Print Quality / Color", 
-      "pt-BR": "Verificar Qualidade de Impressão / Cor", 
-      "es": "Verificar Calidad de Impresión / Color" 
-  },
-  "Detect Dents or Scratches": { 
-      "en": "Detect Dents or Scratches", 
-      "pt-BR": "Detectar Amassados ou Arranhões", 
-      "es": "Detectar Abolladuras o Rasguños" 
-  },
-  "Check Lid Sealing": { 
-      "en": "Check Lid Sealing", 
-      "pt-BR": "Verificar Vedação da Tampa", 
-      "es": "Verificar Sellado de la Tapa" 
-  },
   // Matte Block
-  "Measure Dimensions (Metrology)": { 
-      "en": "Measure Dimensions (Metrology)", 
-      "pt-BR": "Medir Dimensões (Metrologia)", 
-      "es": "Medir Dimensiones (Metrología)" 
+  "Measure Dimensions (Backlight)": { 
+      "en": "Measure Dimensions (Backlight)", 
+      "pt-BR": "Medir Dimensões (Backlight)", 
+      "es": "Medir Dimensiones (Luz Trasera)" 
   },
   "Check Surface Flatness": { 
       "en": "Check Surface Flatness", 
       "pt-BR": "Verificar Planicidade da Superfície", 
       "es": "Verificar Planitud de la Superficie" 
   },
-  "Detect Surface Flaws": { 
-      "en": "Detect Surface Flaws", 
-      "pt-BR": "Detectar Falhas na Superfície", 
-      "es": "Detectar Defectos Superficiales" 
-  },
-  "Calibrate Robot Coordinate System": { 
-      "en": "Calibrate Robot Coordinate System", 
-      "pt-BR": "Calibrar Sistema de Coordenadas do Robô", 
-      "es": "Calibrar Sistema de Coordenadas del Robot" 
-  },
   // Bottle Cap
   "Inspect Liner Seal Integrity": { 
       "en": "Inspect Liner Seal Integrity", 
       "pt-BR": "Inspecionar Integridade do Vedante (Liner)", 
       "es": "Inspeccionar Integridad del Sello (Liner)" 
-  },
-  "Verify Logo Print Quality": { 
-      "en": "Verify Logo Print Quality", 
-      "pt-BR": "Verificar Qualidade de Impressão do Logo", 
-      "es": "Verificar Calidad de Impresión del Logo" 
-  },
-  "Check for Deformed Criminp": { 
-      "en": "Check for Deformed Crimp", 
-      "pt-BR": "Verificar Crimpagem Deformada", 
-      "es": "Verificar Crimpado Deformado" 
   },
   "Read Top Print Code": { 
       "en": "Read Top Print Code", 

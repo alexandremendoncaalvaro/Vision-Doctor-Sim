@@ -105,14 +105,10 @@ export interface OpticalMetrics {
   magnification: number;
   dof: number; // mm
   pixelDensity: number; // px/mm
-  motionBlurPx: number; // Estimated blur in pixels
+  motionBlurPx: number; // Estimated blur in pixels (Total)
+  linearBlurPx: number; // Blur from speed (Directional)
+  vibrationBlurPx: number; // Blur from vibration (Isotropic)
   exposureValue: number; // Estimated relative brightness (1.0 = optimal)
-}
-
-export interface DoctorAdvice {
-  summary: string;
-  details: string[];
-  score: number; // 0-100 suitability
 }
 
 export interface ValidationResult {
@@ -120,4 +116,10 @@ export interface ValidationResult {
   contrast: 'good' | 'poor';
   stability: 'good' | 'acceptable' | 'poor';
   exposure: 'good' | 'dark' | 'bright';
+}
+
+export interface DoctorAdvice {
+  summary: string;
+  details: string[];
+  score: number;
 }

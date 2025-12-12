@@ -226,12 +226,22 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
 
   }, [state, metrics, viewType]);
 
+  const blurFilterId = "motionBlurFilter";
+
   const blurStyle = useMemo(() => {
     if (viewType === 'free') return {};
-    const totalBlurPx = metrics.motionBlurPx;
-    if (totalBlurPx < 0.5) return {};
-    return { filter: `blur(${Math.min(totalBlurPx, 20)}px)` };
-  }, [metrics.motionBlurPx, viewType]);
+    
+    const lin = metrics.linearBlurPx;
+    const vib = metrics.vibrationBlurPx;
+
+    if (lin < 0.5 && vib < 0.5) return {};
+
+    const scale = 0.5; 
+    const stdX = (lin + vib) * scale;
+    const stdY = vib * scale;
+
+    return { filter: `url(#${blurFilterId})` };
+  }, [metrics, viewType]);
 
   const noiseOpacity = Math.min(Math.max(state.gain / 40, 0), 0.6);
 
@@ -242,8 +252,26 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     height: `${state.roiH * 100}%`,
   };
 
+  const currentStdDev = useMemo(() => {
+     const lin = metrics.linearBlurPx;
+     const vib = metrics.vibrationBlurPx;
+     const scale = 0.5;
+     const stdX = Math.max((lin + vib) * scale, 0);
+     const stdY = Math.max(vib * scale, 0);
+     return `${stdX} ${stdY}`;
+  }, [metrics]);
+
   return (
     <div className="w-full h-full relative bg-black group outline-none overflow-hidden" tabIndex={0}>
+      
+      <svg className="absolute w-0 h-0">
+        <defs>
+          <filter id={blurFilterId}>
+             <feGaussianBlur in="SourceGraphic" stdDeviation={currentStdDev} />
+          </filter>
+        </defs>
+      </svg>
+
       <div 
         ref={containerRef} 
         className="w-full h-full transition duration-100" 
@@ -679,29 +707,33 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
   const ambient = new THREE.AmbientLight(colorHex, 0.02 + (baseIntensity * 0.05));
   group.add(ambient);
 
-  // Position Logic
+  const dist = state.lightDistance || 200;
+  
+  // Calculate bounding box offsets to prevent clipping
+  const objDim = OBJECT_DIMS[state.objectType];
+  const halfW = objDim.w / 2;
+  const halfH = objDim.h / 2;
+  const halfD = objDim.depth / 2;
+
   let lightPos = new THREE.Vector3();
   let lightTarget = new THREE.Vector3(0, targetY, 0);
 
-  // Distance Control
-  // "Distance" usually means from object center to light source.
-  const dist = state.lightDistance || 200;
-
-  // Default positions relative to object center (0,targetY,0)
   switch (state.lightPosition) {
     case LightPosition.Camera:
       lightPos.set(0, camY, camZ);
       break;
     case LightPosition.Back:
-      // STRICTLY BEHIND (-Z). 
-      lightPos.set(0, targetY, -dist);
+      // Behind object means -Z. Must be behind halfD.
+      lightPos.set(0, targetY, -halfD - dist);
       break;
     case LightPosition.Top:
-      lightPos.set(0, targetY + dist, 0);
+      // Top means +Y. Must be above halfH.
+      // Offset slightly in Z to avoid Gimbal lock (0.01)
+      lightPos.set(0, halfH + dist, 0.01); 
       break;
     case LightPosition.Side:
-      // From side (X axis)
-      lightPos.set(dist, targetY + 20, 0);
+      // Side means +X. Must be right of halfW.
+      lightPos.set(halfW + dist, targetY, 0);
       break;
     case LightPosition.LowAngle:
       lightPos.set(0, targetY, 0); 
@@ -710,7 +742,6 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
       lightPos.set(0, 0, dist);
   }
 
-  // Create a container for the fixture that is oriented towards the target
   const fixtureGroup = new THREE.Group();
   fixtureGroup.position.copy(lightPos);
   
@@ -732,9 +763,10 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
   const addSpot = (x:number, y:number, z:number, angle:number, intensityMult: number = 1.0) => {
      const s = new THREE.SpotLight(colorHex, baseIntensity * 100 * intensityMult);
      s.position.set(x, y, z);
-     // Target relative to light, shining down -Z in local space
+     
      const targetObj = new THREE.Object3D();
-     targetObj.position.set(x, y, z - 100);
+     targetObj.position.set(x, y, z + 100); 
+     
      fixtureGroup.add(targetObj);
      s.target = targetObj;
      
@@ -748,15 +780,11 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
 
   if (fixture === LightFixture.Ring) {
      if (state.lightPosition === LightPosition.LowAngle) {
-         // Dark Field Ring (Grazing) - Overrides fixtureGroup
          fixtureGroup.removeFromParent(); 
          const laGroup = new THREE.Group();
-         laGroup.position.set(0, targetY, 0); 
+         laGroup.position.set(0, targetY, 0); // Low angle is always relative to target focus plane
          group.add(laGroup);
          
-         // Use LightDistance as Diameter/Radius for Low Angle?
-         // No, LightDistance usually means elevation or standoff.
-         // Let's use fixed radius for now, elevation very low.
          const r = 90; 
          
          for(let i=0; i<8; i++) {
@@ -775,7 +803,6 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
          laGroup.add(ringVis);
 
      } else {
-         // Standard Ring
          const r = 45; 
          for(let i=0; i<6; i++) {
              const a = (i/6)*Math.PI*2;
@@ -786,34 +813,30 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
      }
   } 
   else if (fixture === LightFixture.Panel) {
-      // Config: Small, Medium, Large
       let size = 200;
       if (config === LightConfig.Small) size = 100;
       if (config === LightConfig.Large) size = 400;
 
       if (state.lightPosition === LightPosition.Back) {
-          // Backlight Silhouette
           fixtureGroup.removeFromParent();
           const dl = new THREE.DirectionalLight(colorHex, baseIntensity * 2);
-          // Position explicitly at -dist
-          dl.position.set(0, targetY, -dist);
+          
+          // Ensure it's behind the object
+          dl.position.set(0, targetY, -halfD - dist);
           dl.target.position.set(0, targetY, 0);
           configShadow(dl);
           
-          // Shadow bounds match size
           const d = size / 2;
           dl.shadow.camera.left = -d; dl.shadow.camera.right = d;
           dl.shadow.camera.top = d; dl.shadow.camera.bottom = -d;
           group.add(dl); group.add(dl.target);
           
           const plane = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ color: visualColor }));
-          plane.position.set(0, targetY, -dist);
+          plane.position.set(0, targetY, -halfD - dist);
           plane.lookAt(0, targetY, 0);
           group.add(plane);
       } else {
-          // Diffuse Front/Side
           const d = size / 4;
-          // 4 spots to simulate area
           addSpot(-d, -d, 0, 0.9, 10);
           addSpot(d, -d, 0, 0.9, 10);
           addSpot(-d, d, 0, 0.9, 10);
@@ -832,34 +855,29 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
           barGroup.rotation.z = rotZ;
           fixtureGroup.add(barGroup);
 
-          // Add spots to barGroup
           const s1 = new THREE.SpotLight(colorHex, baseIntensity * 40);
           s1.position.set(-len/3, 0, 0);
-          const t1 = new THREE.Object3D(); t1.position.set(-len/3, 0, -100);
+          const t1 = new THREE.Object3D(); t1.position.set(-len/3, 0, 100); 
           barGroup.add(t1); s1.target = t1; s1.angle=0.6; configShadow(s1); barGroup.add(s1);
 
           const s2 = new THREE.SpotLight(colorHex, baseIntensity * 40);
           s2.position.set(0, 0, 0);
-          const t2 = new THREE.Object3D(); t2.position.set(0, 0, -100);
+          const t2 = new THREE.Object3D(); t2.position.set(0, 0, 100);
           barGroup.add(t2); s2.target = t2; s2.angle=0.6; configShadow(s2); barGroup.add(s2);
 
           const s3 = new THREE.SpotLight(colorHex, baseIntensity * 40);
           s3.position.set(len/3, 0, 0);
-          const t3 = new THREE.Object3D(); t3.position.set(len/3, 0, -100);
+          const t3 = new THREE.Object3D(); t3.position.set(len/3, 0, 100);
           barGroup.add(t3); s3.target = t3; s3.angle=0.6; configShadow(s3); barGroup.add(s3);
 
           const vis = new THREE.Mesh(new THREE.BoxGeometry(len, 20, 10), new THREE.MeshBasicMaterial({ color: visualColor }));
           barGroup.add(vis);
       }
 
-      createBar(0, 0, 0); // Always one center
+      createBar(0, 0, 0); 
 
       if (config === LightConfig.Dual) {
-           // Move first one up, create second one down? Or Left/Right?
-           // If "Side" pos, Dual usually means Above/Below axis or Left/Right.
-           // Let's assume Side pos = Horizontal approach.
-           // Dual = One Left, One Right (relative to fixture axis)
-           fixtureGroup.clear(); // Clear the single one we made
+           fixtureGroup.clear(); 
            createBar(-60, 0, 0);
            createBar(60, 0, 0);
       }

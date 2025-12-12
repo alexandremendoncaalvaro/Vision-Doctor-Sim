@@ -14,17 +14,15 @@ import {
 import { STANDARD_FOCAL_LENGTHS, STANDARD_APERTURES, OBJECT_GOALS } from '../constants';
 import { TEXTS, GOAL_TRANSLATIONS } from '../translations';
 import { getPreset } from '../presets';
-import { Camera, Lightbulb, Box, Activity, Target, RotateCw, Wind, Palette, Scan, Signal, Eye, Move3d, Wand2, MonitorPlay } from 'lucide-react';
+import { Camera, Lightbulb, Box, Activity, Target, RotateCw, Wind, Palette, Scan, Signal, Eye, Move3d, Wand2 } from 'lucide-react';
 
 interface ControlPanelProps {
   state: SimulationState;
   onChange: (newState: Partial<SimulationState>) => void;
-  onAnalyze: () => void;
-  isAnalyzing: boolean;
   language: Language;
 }
 
-const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze, isAnalyzing, language }) => {
+const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }) => {
   const t = TEXTS[language];
   
   const handleChange = (key: keyof SimulationState, value: any) => {
@@ -151,14 +149,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
               ))}
             </select>
           </div>
-
-          <button
-            onClick={handleAutoTune}
-            className="w-full mt-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-semibold py-2 px-3 rounded flex items-center justify-center gap-2 shadow-md transition-all border border-white/10"
-            title={t.autoTuneDesc}
-          >
-            <Wand2 size={14} /> {t.autoTune}
-          </button>
         </section>
 
         {/* 2. Environment & Motion (Moved Up) */}
@@ -231,6 +221,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
                />
              </div>
           </div>
+
+          <button
+            onClick={handleAutoTune}
+            className="w-full mt-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold py-3 px-3 rounded flex items-center justify-center gap-2 shadow-md transition-all border border-white/10 ring-1 ring-white/20"
+            title={t.autoTuneDesc}
+          >
+            <Wand2 size={16} /> {t.autoTune}
+          </button>
         </section>
 
         {/* 3. View & Orientation */}
@@ -480,26 +478,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
              />
           </div>
         </section>
-
-        {/* Action */}
-        <div className="pt-4">
-          <button
-            onClick={onAnalyze}
-            disabled={isAnalyzing}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-900/20"
-          >
-             {isAnalyzing ? (
-               <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>{t.analyzing}</span>
-               </div>
-             ) : (
-               <div className="flex items-center gap-2">
-                 <span>{t.analyzeBtn}</span>
-               </div>
-             )}
-          </button>
-        </div>
 
       </div>
     </div>

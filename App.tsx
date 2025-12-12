@@ -8,17 +8,15 @@ import {
   LightConfig,
   ObjectType,
   OpticalMetrics,
-  DoctorAdvice,
   ValidationResult,
   Language
 } from './types';
 import { SENSOR_SPECS, OBJECT_DIMS, OBJECT_GOALS } from './constants';
-import { analyzeSetup } from './services/geminiService';
 import ControlPanel from './components/ControlPanel';
 import SchematicView from './components/SchematicView';
 import SimulatedImage from './components/SimulatedImage';
 import { TEXTS } from './translations';
-import { Play, Grid, MessageSquare, AlertCircle, Box, Video, CheckCircle, XCircle, AlertTriangle, Globe } from 'lucide-react';
+import { Play, Grid, Box, Video, CheckCircle, XCircle, AlertTriangle, Globe } from 'lucide-react';
 
 const App: React.FC = () => {
   // --- STATE ---
@@ -57,9 +55,6 @@ const App: React.FC = () => {
 
   const [viewMode, setViewMode] = useState<'schematic' | 'simulation'>('schematic');
   const [simulationViewType, setSimulationViewType] = useState<'camera' | 'free'>('camera');
-  const [advice, setAdvice] = useState<DoctorAdvice | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showAdvicePanel, setShowAdvicePanel] = useState(false);
 
   // --- OPTICAL CALCULATIONS ---
   const metrics = useMemo<OpticalMetrics>(() => {
@@ -72,17 +67,19 @@ const App: React.FC = () => {
     const dof = (2 * state.aperture * coc) / (magnification * magnification);
 
     // Calc Motion Blur (Total = Line Speed + Vibration Speed)
-    // 1. Line Speed shift
+    // 1. Line Speed shift (Linear)
     const speedShiftMm = state.objectSpeed * (state.exposureTime / 1000000);
     
-    // 2. Vibration shift
+    // 2. Vibration shift (Random/Gaussian)
     // Assume Level 10 vibration ~ 200mm/s effective random velocity
     const vibVelocity = state.vibrationLevel * 20; 
     const vibShiftMm = vibVelocity * (state.exposureTime / 1000000);
     
-    const totalShiftMm = speedShiftMm + vibShiftMm;
     const pixelDensity = 2448 / fovWidth; // Assuming 5MP sensor width for density calc
-    const motionBlurPx = totalShiftMm * pixelDensity;
+    
+    const linearBlurPx = speedShiftMm * pixelDensity;
+    const vibrationBlurPx = vibShiftMm * pixelDensity;
+    const motionBlurPx = linearBlurPx + vibrationBlurPx; // Combined magnitude for validation checks
 
     // Calc Exposure Value (Simplistic brightness ratio)
     // Base: 5000us, f/2.8, 0dB gain = 1.0
@@ -96,6 +93,8 @@ const App: React.FC = () => {
       dof,
       pixelDensity,
       motionBlurPx,
+      linearBlurPx,
+      vibrationBlurPx,
       exposureValue
     };
   }, [state]);
@@ -159,14 +158,6 @@ const App: React.FC = () => {
     setState(prev => ({ ...prev, ...updates }));
   };
 
-  const handleAnalyze = async () => {
-    setIsAnalyzing(true);
-    setShowAdvicePanel(true);
-    const result = await analyzeSetup(state, metrics, language);
-    setAdvice(result);
-    setIsAnalyzing(false);
-  };
-
   const getStatusIcon = (status: string) => {
     if (status === 'good') return <CheckCircle size={16} className="text-emerald-500" />;
     if (status === 'acceptable') return <AlertTriangle size={16} className="text-yellow-500" />;
@@ -193,8 +184,6 @@ const App: React.FC = () => {
         <ControlPanel 
           state={state} 
           onChange={handleStateChange} 
-          onAnalyze={handleAnalyze}
-          isAnalyzing={isAnalyzing}
           language={language}
         />
       </div>
@@ -254,14 +243,6 @@ const App: React.FC = () => {
                       <option value="es">Español</option>
                   </select>
               </div>
-
-              <button 
-                onClick={() => setShowAdvicePanel(!showAdvicePanel)}
-                className={`p-2 rounded-full hover:bg-slate-800 transition-colors ${advice ? 'text-indigo-400' : 'text-slate-500'}`}
-                title={t.toggleDoctor}
-              >
-                <MessageSquare size={20} />
-              </button>
           </div>
         </div>
 
@@ -311,73 +292,6 @@ const App: React.FC = () => {
              </div>
           )}
         </div>
-
-        {/* Floating Doctor Panel */}
-        {showAdvicePanel && (
-          <div className="absolute right-4 top-16 w-80 bg-slate-900/95 backdrop-blur-md border border-indigo-500/30 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-100px)] animate-in fade-in slide-in-from-right-10 duration-200 z-50">
-            <div className="p-4 bg-indigo-900/30 border-b border-indigo-500/20 flex justify-between items-center">
-              <h3 className="font-semibold text-indigo-100 flex items-center gap-2">
-                <AlertCircle size={16} /> 
-                {t.reportTitle}
-              </h3>
-              <button 
-                onClick={() => setShowAdvicePanel(false)}
-                className="text-indigo-300 hover:text-white"
-              >
-                &times;
-              </button>
-            </div>
-            
-            <div className="p-4 overflow-y-auto">
-              {!advice ? (
-                <div className="text-center py-8 text-slate-400 text-sm">
-                  <p>{t.noReport}</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Score */}
-                  <div className="flex items-center gap-4">
-                    <div className="relative w-16 h-16 flex items-center justify-center">
-                      <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                        <path className="text-slate-700" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
-                        <path 
-                          className={`${advice.score > 80 ? 'text-emerald-500' : advice.score > 50 ? 'text-yellow-500' : 'text-red-500'}`}
-                          strokeDasharray={`${advice.score}, 100`}
-                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
-                          fill="none" 
-                          stroke="currentColor" 
-                          strokeWidth="4" 
-                        />
-                      </svg>
-                      <span className="absolute text-sm font-bold">{advice.score}</span>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-400 uppercase tracking-wider">{t.reportScore}</div>
-                      <div className="font-medium text-slate-200">
-                          {advice.score > 80 ? t.reportExcellent : advice.score > 50 ? t.reportAcceptable : t.reportPoor}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Summary */}
-                  <div className="bg-slate-800/50 p-3 rounded border-l-2 border-indigo-500">
-                    <p className="text-sm text-slate-200 leading-relaxed">{advice.summary}</p>
-                  </div>
-
-                  {/* Bullets */}
-                  <ul className="space-y-2">
-                    {advice.details.map((point, idx) => (
-                      <li key={idx} className="text-xs text-slate-300 flex items-start gap-2">
-                        <span className="mt-1 block w-1 h-1 rounded-full bg-indigo-400 shrink-0" />
-                        {point}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
       </div>
     </div>
