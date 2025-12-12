@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { SimulationState, OpticalMetrics, LightColor, LightType, ObjectType } from '../types';
 import { OBJECT_DIMS } from '../constants';
 
@@ -57,7 +58,7 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     cameraRef.current = indCam;
 
     const freeCam = new THREE.PerspectiveCamera(50, 1, 1, 5000);
-    freeCam.position.set(200, 200, 300);
+    freeCam.position.set(150, 150, 250);
     freeCam.lookAt(0, 0, 0);
     freeCameraRef.current = freeCam;
 
@@ -66,12 +67,19 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    // Exposure control via Tone Mapping
-    renderer.toneMapping = THREE.ReinhardToneMapping;
+    // High Dynamic Range
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.domElement.style.outline = 'none';
     
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+
+    // --- ENVIRONMENT MAP (CRITICAL FOR GLASS/METAL) ---
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    pmremGenerator.compileEquirectangularShader();
+    const envTexture = pmremGenerator.fromScene(new RoomEnvironment()).texture;
+    scene.environment = envTexture;
+    scene.background = new THREE.Color('#050505');
 
     const controls = new OrbitControls(freeCam, renderer.domElement);
     controls.enableDamping = true;
@@ -153,6 +161,7 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
       cancelAnimationFrame(frameIdRef.current);
       renderer.dispose();
       controls.dispose();
+      pmremGenerator.dispose();
       if (containerRef.current) {
         containerRef.current.innerHTML = '';
       }
@@ -164,6 +173,7 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
   // 1. Background Update
   useEffect(() => {
     if (sceneRef.current) {
+       // We keep the environment for reflections, but change the visible background
        sceneRef.current.background = new THREE.Color(state.backgroundColor);
     }
   }, [state.backgroundColor]);
@@ -171,19 +181,10 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
   // 2. Exposure Physics Update
   useEffect(() => {
     if (rendererRef.current) {
-       // Simple exposure simulation model
-       // Base values: Aperture f/2.8, Time 5000us, Gain 0, Intensity 50
-       // Exposure ~ (Time * Intensity * ISO) / Aperture^2
-       
        const baseExposure = 1.0;
-       
        const timeFactor = state.exposureTime / 5000;
        const apertureFactor = Math.pow(2.8, 2) / Math.pow(state.aperture, 2);
-       
-       // Gain: 0dB = 1x, 20dB = 10x
        const gainFactor = Math.pow(10, state.gain / 20);
-
-       // Final exposure applied to renderer
        const calculatedExposure = baseExposure * timeFactor * apertureFactor * gainFactor;
        
        rendererRef.current.toneMappingExposure = calculatedExposure;
@@ -217,18 +218,11 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
   // --- BLUR CALCULATION ---
   const blurStyle = useMemo(() => {
     if (viewType === 'free') return {};
-    
-    // Blur is pre-calculated in App.tsx metrics based on speed + vibration vs exposure time
-    // We just render it here.
     const totalBlurPx = metrics.motionBlurPx;
-    
     if (totalBlurPx < 0.5) return {};
     return { filter: `blur(${Math.min(totalBlurPx, 20)}px)` };
   }, [metrics.motionBlurPx, viewType]);
 
-  // --- NOISE OVERLAY STYLE ---
-  // High gain introduces noise.
-  // 0 dB = 0 opacity, 24 dB = 0.5 opacity (visible grain)
   const noiseOpacity = Math.min(Math.max(state.gain / 40, 0), 0.6);
 
   // --- ROI STYLE ---
@@ -247,7 +241,6 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
         style={blurStyle}
       />
 
-      {/* Sensor Noise Overlay */}
       {viewType === 'camera' && noiseOpacity > 0 && (
          <div 
            className="absolute inset-0 pointer-events-none mix-blend-screen"
@@ -258,14 +251,12 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
          />
       )}
       
-      {/* ROI Overlay (Only in Camera View) */}
       {viewType === 'camera' && (
         <div className="absolute inset-0 pointer-events-none">
            <div 
              className="absolute border-2 border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.5)]"
              style={{
                  ...roiStyle,
-                 // Use a massive box-shadow to create the "dimmed outside" effect
                  boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.6)'
              }}
            >
@@ -334,21 +325,14 @@ function createEtchedTexture(): THREE.Texture {
   if (ctx) {
       ctx.fillStyle = '#111111'; // Match chip color
       ctx.fillRect(0, 0, 256, 256);
-      
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      
-      // Main Code
       ctx.font = 'bold 50px Consolas, monospace';
-      ctx.fillStyle = '#9ca3af'; // slate-400
+      ctx.fillStyle = '#9ca3af'; 
       ctx.fillText('FPGA', 128, 80);
-      
-      // Detail
       ctx.font = '30px Consolas, monospace';
-      ctx.fillStyle = '#64748b'; // slate-500
+      ctx.fillStyle = '#64748b'; 
       ctx.fillText('X-2048', 128, 140);
-      
-      // Tiny text
       ctx.font = '20px Arial';
       ctx.fillStyle = '#475569';
       ctx.fillText('TAIWAN', 128, 190);
@@ -360,38 +344,45 @@ function createEtchedTexture(): THREE.Texture {
 
 function createBeerLabelTexture(name: string, subtext: string, hue: number): THREE.Texture {
     const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 256;
+    canvas.width = 1024;
+    canvas.height = 512;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-        // Gold/Foil background effect
-        const grad = ctx.createLinearGradient(0, 0, 512, 0);
+        const grad = ctx.createLinearGradient(0, 0, 1024, 0);
         grad.addColorStop(0, `hsl(${hue}, 80%, 20%)`);
-        grad.addColorStop(0.5, `hsl(${hue}, 60%, 40%)`); // Highlight
+        grad.addColorStop(0.3, `hsl(${hue}, 70%, 30%)`);
+        grad.addColorStop(0.5, `hsl(${hue}, 60%, 45%)`); // Highlight
+        grad.addColorStop(0.7, `hsl(${hue}, 70%, 30%)`);
         grad.addColorStop(1, `hsl(${hue}, 80%, 20%)`);
         ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 512, 256);
+        ctx.fillRect(0, 0, 1024, 512);
         
-        // Border
         ctx.strokeStyle = '#d4af37'; // Gold
-        ctx.lineWidth = 10;
-        ctx.strokeRect(10, 10, 492, 236);
+        ctx.lineWidth = 15;
+        ctx.strokeRect(20, 20, 984, 472);
 
-        // Text
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetX = 5;
+        ctx.shadowOffsetY = 5;
+
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 60px Serif';
-        ctx.fillText(name.toUpperCase(), 256, 100);
+        ctx.font = 'bold 120px Serif';
+        ctx.fillText(name.toUpperCase(), 512, 200);
         
         ctx.fillStyle = '#facc15';
-        ctx.font = 'italic 30px Sans-serif';
-        ctx.fillText(subtext, 256, 160);
+        ctx.font = 'italic 60px Sans-serif';
+        ctx.fillText(subtext, 512, 320);
 
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
         ctx.fillStyle = '#e2e8f0';
-        ctx.font = '16px Monospace';
-        ctx.fillText('ALC 5.2% VOL | 330ML', 256, 210);
+        ctx.font = '30px Monospace';
+        ctx.fillText('ALC 5.2% VOL | 330ML', 512, 420);
     }
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
@@ -400,32 +391,34 @@ function createBeerLabelTexture(name: string, subtext: string, hue: number): THR
 
 function createCrownCapTexture(color: string): THREE.Texture {
     const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 256;
+    canvas.width = 512;
+    canvas.height = 512;
     const ctx = canvas.getContext('2d');
     if (ctx) {
         ctx.fillStyle = color; 
-        ctx.fillRect(0,0,256,256);
+        ctx.fillRect(0,0,512,512);
 
-        // Logo
+        // Scratches / imperfection
+        for(let i=0; i<100; i++) {
+           ctx.fillStyle = 'rgba(255,255,255,0.05)';
+           const x = Math.random() * 512;
+           const y = Math.random() * 512;
+           const w = Math.random() * 50;
+           const h = 1;
+           ctx.fillRect(x,y,w,h);
+        }
+
         ctx.beginPath();
-        ctx.arc(128, 128, 100, 0, Math.PI * 2);
+        ctx.arc(256, 256, 180, 0, Math.PI * 2);
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 8;
+        ctx.lineWidth = 15;
         ctx.stroke();
 
-        ctx.font = 'bold 100px sans-serif';
+        ctx.font = 'bold 200px sans-serif';
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('VD', 128, 128); // Vision Doctor
-        
-        // Dent effect
-        const grad = ctx.createRadialGradient(128,128, 50, 128,128,128);
-        grad.addColorStop(0, 'rgba(0,0,0,0)');
-        grad.addColorStop(1, 'rgba(0,0,0,0.3)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0,0,256,256);
+        ctx.fillText('VD', 256, 256); 
     }
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
@@ -451,7 +444,6 @@ function updateObject(group: THREE.Group, type: ObjectType) {
      chip.position.z = dim.depth/2 + 1.5;
      group.add(chip);
      
-     // Label on IC with Texture
      const labelGeo = new THREE.PlaneGeometry(16, 16);
      const labelMat = new THREE.MeshStandardMaterial({ 
          map: createEtchedTexture(),
@@ -472,115 +464,121 @@ function updateObject(group: THREE.Group, type: ObjectType) {
      }
   } 
   else if (type === ObjectType.GlassBottle) {
-      // High Quality Beer Bottle (Lathe)
-      // Dimensions: h=180, w=60 => r=30
-      // We will model it standing up along Y
       const h = dim.h;
       const r = dim.w / 2;
       
       const points = [];
-      // Profile for Lathe
-      points.push(new THREE.Vector2(0, 0)); // Center bottom
-      points.push(new THREE.Vector2(r * 0.85, 0)); // Flat bottom
-      points.push(new THREE.Vector2(r, r * 0.2)); // Rounded corner
-      points.push(new THREE.Vector2(r, h * 0.55)); // Body up to shoulder
-      points.push(new THREE.Vector2(r * 0.35, h * 0.75)); // Neck start
-      points.push(new THREE.Vector2(r * 0.32, h * 0.95)); // Neck top
-      points.push(new THREE.Vector2(r * 0.4, h * 0.96)); // Finish bulge bottom
-      points.push(new THREE.Vector2(r * 0.4, h * 0.99)); // Finish bulge top
-      points.push(new THREE.Vector2(r * 0.32, h)); // Top lip
-      points.push(new THREE.Vector2(0, h)); // Close top for cap
+      points.push(new THREE.Vector2(0, 0)); 
+      points.push(new THREE.Vector2(r * 0.7, 0));
+      points.push(new THREE.Vector2(r * 0.95, r * 0.25)); 
+      points.push(new THREE.Vector2(r, h * 0.55));
+      points.push(new THREE.Vector2(r * 0.35, h * 0.75)); // Shoulder
+      points.push(new THREE.Vector2(r * 0.32, h * 0.95)); // Neck
+      points.push(new THREE.Vector2(r * 0.4, h * 0.96)); // Finish Ring
+      points.push(new THREE.Vector2(r * 0.4, h * 0.99)); 
+      points.push(new THREE.Vector2(r * 0.32, h)); 
+      points.push(new THREE.Vector2(0, h));
 
-      const glassGeo = new THREE.LatheGeometry(points, 32);
+      const glassGeo = new THREE.LatheGeometry(points, 64);
       const glassMat = new THREE.MeshPhysicalMaterial({
-          color: 0x5c3a21, // Deep Amber
-          transmission: 0.95,
+          color: 0x8a4b00, // Amber
+          transmission: 0.98,
           opacity: 1,
           metalness: 0.0,
-          roughness: 0.1,
+          roughness: 0.05, // Very Smooth
           ior: 1.5,
-          thickness: 2.0,
-          side: THREE.FrontSide
+          thickness: 3.0, // Thick glass
+          attenuationColor: new THREE.Color('#3f2105'), // Absorb darker amber
+          attenuationDistance: 25.0, // Darkens as it gets thicker
+          side: THREE.DoubleSide
       });
       const bottle = new THREE.Mesh(glassGeo, glassMat);
       
-      // Liquid (Lathe slightly smaller)
-      const liqPoints = points.slice(0, 6).map(p => new THREE.Vector2(p.x * 0.9, p.y < h*0.8 ? p.y : h*0.8));
+      // Liquid Inside
+      const liqPoints = points.slice(0, 5).map(p => new THREE.Vector2(p.x * 0.88, p.y < h*0.7 ? p.y + 2 : h*0.7));
       const liqGeo = new THREE.LatheGeometry(liqPoints, 32);
       const liqMat = new THREE.MeshStandardMaterial({ 
-          color: 0x331a00, 
-          roughness: 0.2 
+          color: 0x1a0f00, 
+          roughness: 0.3 
       });
       const liquid = new THREE.Mesh(liqGeo, liqMat);
 
-      // Label (Cylinder wrapper)
-      const labelGeo = new THREE.CylinderGeometry(r + 0.1, r + 0.1, h * 0.3, 32, 1, true);
+      // Label
+      const labelGeo = new THREE.CylinderGeometry(r + 0.1, r + 0.1, h * 0.3, 64, 1, true);
       const labelMat = new THREE.MeshStandardMaterial({ 
           map: createBeerLabelTexture("SimulBrew", "Premium Lager", 25), 
           transparent: true,
-          side: THREE.DoubleSide
+          side: THREE.DoubleSide,
+          roughness: 0.4
       });
       const label = new THREE.Mesh(labelGeo, labelMat);
       label.position.y = h * 0.35;
       label.rotation.y = -Math.PI / 2;
 
-      // Crown Cap
-      const capGeo = new THREE.CylinderGeometry(r*0.35, r*0.35, 4, 21);
-      const capMat = new THREE.MeshStandardMaterial({ color: 0xc0c0c0, metalness: 0.8, roughness: 0.3 });
-      const cap = new THREE.Mesh(capGeo, capMat);
-      cap.position.y = h;
+      // Realistic Crown Cap
+      const capGroup = createRealisticCrownCap(r * 0.35);
+      capGroup.position.y = h;
       
       const bottleGroup = new THREE.Group();
       bottleGroup.add(bottle);
       bottleGroup.add(liquid);
       bottleGroup.add(label);
-      bottleGroup.add(cap);
+      bottleGroup.add(capGroup);
 
-      // Center the group vertically
       bottleGroup.position.y = -h/2;
       group.add(bottleGroup);
   }
   else if (type === ObjectType.AluminumCan) {
-      // Dimensions: 66x120
       const h = dim.h;
       const r = dim.w / 2;
       
-      // Main Body
-      const bodyH = h * 0.8;
-      const bodyGeo = new THREE.CylinderGeometry(r, r, bodyH, 64);
-      const bodyMat = new THREE.MeshStandardMaterial({
+      // Body Material
+      const aluMat = new THREE.MeshStandardMaterial({
            color: 0xffffff,
            map: createBeerLabelTexture("RoboHops", "Neural IPA", 200),
-           metalness: 0.4,
-           roughness: 0.3
+           metalness: 0.7, // Higher metalness for sheen
+           roughness: 0.25,
+           envMapIntensity: 1.2
       });
-      const body = new THREE.Mesh(bodyGeo, bodyMat);
-      // Fix texture mapping for cylinder (wrap around)
+      const topMat = new THREE.MeshStandardMaterial({ 
+          color: 0xe5e5e5, 
+          metalness: 0.95, 
+          roughness: 0.15,
+          envMapIntensity: 1.5
+      });
+
+      const bodyH = h * 0.8;
+      const bodyGeo = new THREE.CylinderGeometry(r, r, bodyH, 64);
+      const body = new THREE.Mesh(bodyGeo, aluMat);
       body.rotation.y = -Math.PI/2;
       
-      // Taper Bottom
+      // Tapers
       const taperH = h * 0.08;
       const bottomGeo = new THREE.CylinderGeometry(r, r * 0.7, taperH, 64);
-      const metalMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, metalness: 0.9, roughness: 0.2 });
-      const bottom = new THREE.Mesh(bottomGeo, metalMat);
+      const bottom = new THREE.Mesh(bottomGeo, topMat);
       bottom.position.y = -bodyH/2 - taperH/2;
       
-      // Taper Top
       const topGeo = new THREE.CylinderGeometry(r * 0.8, r, taperH, 64);
-      const top = new THREE.Mesh(topGeo, metalMat);
+      const top = new THREE.Mesh(topGeo, topMat);
       top.position.y = bodyH/2 + taperH/2;
 
-      // Rim/Lid
-      const rimGeo = new THREE.TorusGeometry(r * 0.8, 1.5, 16, 64);
-      const rim = new THREE.Mesh(rimGeo, metalMat);
+      // Rim
+      const rimGeo = new THREE.TorusGeometry(r * 0.8, 1.2, 16, 100);
+      const rim = new THREE.Mesh(rimGeo, topMat);
       rim.rotation.x = Math.PI/2;
       rim.position.y = bodyH/2 + taperH;
 
-      // Pull Tab area (simple circle)
-      const lidGeo = new THREE.CircleGeometry(r*0.75, 32);
-      const lid = new THREE.Mesh(lidGeo, metalMat);
+      // Lid Surface
+      const lidGeo = new THREE.CircleGeometry(r*0.78, 64);
+      const lid = new THREE.Mesh(lidGeo, topMat);
       lid.rotation.x = -Math.PI/2;
       lid.position.y = bodyH/2 + taperH - 0.5;
+
+      // Pull Tab
+      const tabGeo = new THREE.BoxGeometry(10, 1, 15);
+      const tab = new THREE.Mesh(tabGeo, topMat);
+      tab.position.y = bodyH/2 + taperH + 1;
+      tab.position.z = 5;
 
       const canGroup = new THREE.Group();
       canGroup.add(body);
@@ -588,6 +586,7 @@ function updateObject(group: THREE.Group, type: ObjectType) {
       canGroup.add(top);
       canGroup.add(rim);
       canGroup.add(lid);
+      canGroup.add(tab);
       
       group.add(canGroup);
   }
@@ -599,34 +598,79 @@ function updateObject(group: THREE.Group, type: ObjectType) {
       group.add(block);
   }
   else if (type === ObjectType.BottleCap) {
-      // High Detail Crown Cap (Standing flat)
-      // Standard crown cap has 21 flutes.
-      const r = dim.w / 2;
-      const h = dim.depth;
-      
-      // We simulate flutes by using a cylinder with 21 segments and a bump map, or physical geometry.
-      // Let's use physical geometry: Cylinder with 42 segments.
-      // Every even vertex at bottom pushed out, every odd pushed in?
-      // Simpler: Just a cylinder with texture for now, but high quality material.
-      
-      const capGeo = new THREE.CylinderGeometry(r, r * 1.05, h, 21);
-      // Create separate materials for top and side to look like painted metal
-      const sideMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.3, metalness: 0.4 });
-      const topMat = new THREE.MeshStandardMaterial({ 
-          map: createCrownCapTexture('#b91c1c'),
-          roughness: 0.3, 
-          metalness: 0.4 
-      });
-      
-      const cap = new THREE.Mesh(capGeo, [sideMat, topMat, sideMat]); // Material index: 0:side, 1:top, 2:bottom
-      cap.rotation.x = 0; // Standing flat on XZ if Cylinder defaults to standing on Y?
-      // Cylinder aligns with Y.
-      // We want it flat on XZ plane.
-      // So no rotation needed if we look from side, but usually caps are inspected from top.
-      // Let's leave it aligned to Y axis, so Top view sees the Logo.
-      
+      const cap = createRealisticCrownCap(dim.w / 2);
+      cap.rotation.x = -Math.PI/2; // Orient flat for inspection
       group.add(cap);
   }
+}
+
+// Procedural Crown Cap Geometry
+function createRealisticCrownCap(radius: number): THREE.Group {
+  // Standard Crown Cap has 21 flutes/teeth.
+  const numTeeth = 21;
+  const segments = numTeeth * 2; // 42 segments
+  const height = 6;
+  
+  const group = new THREE.Group();
+
+  // Top Disk
+  const topGeo = new THREE.CylinderGeometry(radius, radius, 0.5, segments);
+  const topMat = new THREE.MeshStandardMaterial({ 
+      map: createCrownCapTexture('#b91c1c'),
+      roughness: 0.3,
+      metalness: 0.5,
+      bumpMap: createCrownCapTexture('#000000'), // Subtle bump
+      bumpScale: 0.1
+  });
+  const top = new THREE.Mesh(topGeo, topMat);
+  top.position.y = height / 2;
+  group.add(top);
+
+  // Skirt (The Crimped Part)
+  // We manipulate a cylinder geometry to create the wave pattern
+  const skirtGeo = new THREE.CylinderGeometry(radius, radius * 1.05, height, segments, 4, true);
+  const posAttribute = skirtGeo.attributes.position;
+  const vertex = new THREE.Vector3();
+
+  // Deform vertices
+  for (let i = 0; i < posAttribute.count; i++) {
+    vertex.fromBufferAttribute(posAttribute, i);
+    
+    // Convert to cylindrical to easily check angle
+    const angle = Math.atan2(vertex.z, vertex.x);
+    // Determine if this segment corresponds to a "tooth" or a "valley"
+    // We have 42 segments. 0, 1 is one tooth pair? No, let's use Math.cos based on angle
+    
+    // Normalized height (0 at center?, no Cylinder is centered at 0)
+    // Cylinder Y ranges from -height/2 to height/2.
+    // We want the deformation to increase towards the bottom (-height/2)
+    
+    const yFactor = (height/2 - vertex.y) / height; // 0 at top, 1 at bottom
+    
+    // Wave function: 21 peaks
+    const wave = Math.cos(angle * numTeeth);
+    
+    // Flare out based on wave
+    const flare = 1.0 + (wave * 0.1 * yFactor); 
+    
+    vertex.x *= flare;
+    vertex.z *= flare;
+
+    posAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
+  }
+  
+  skirtGeo.computeVertexNormals();
+
+  const skirtMat = new THREE.MeshStandardMaterial({ 
+      color: 0xb91c1c, 
+      roughness: 0.3, 
+      metalness: 0.6,
+      side: THREE.DoubleSide
+  });
+  const skirt = new THREE.Mesh(skirtGeo, skirtMat);
+  group.add(skirt);
+
+  return group;
 }
 
 function updateLights(group: THREE.Group, state: SimulationState, camY: number, camZ: number) {
