@@ -523,7 +523,7 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
   const dim = OBJECT_DIMS[type];
 
   if (type === ObjectType.PCB) {
-     const board = new THREE.Mesh(new THREE.BoxGeometry(dim.w, dim.h, dim.depth), new THREE.MeshStandardMaterial({ color: 0x1a472a, roughness: 0.5 }));
+     const board = new THREE.Mesh(new THREE.BoxGeometry(dim.w, dim.h, dim.depth), new THREE.MeshStandardMaterial({ color: 0x1a472a, roughness: 0.7 })); // Roughness 0.5 -> 0.7
      setShadows(board);
      group.add(board);
      const chip = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 3), new THREE.MeshStandardMaterial({ color: 0x111111 }));
@@ -534,7 +534,7 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
      const labelGeo = new THREE.PlaneGeometry(16, 16);
      const labelMat = new THREE.MeshStandardMaterial({ 
          map: createEtchedTexture(),
-         roughness: 0.6,
+         roughness: 0.8, // Increased roughness to prevent glare on text
          metalness: 0.2,
          polygonOffset: true,
          polygonOffsetFactor: -1
@@ -544,7 +544,7 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
      label.receiveShadow = true; 
      group.add(label);
 
-     const padMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 1.0, roughness: 0.1 });
+     const padMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.8, roughness: 0.3 }); // Lower metalness slightly
      for(let i=0; i<5; i++) {
          const pad = new THREE.Mesh(new THREE.BoxGeometry(6, 4, 0.5), padMat);
          pad.position.set(-30, (i-2)*10, dim.depth/2 + 0.25);
@@ -570,15 +570,15 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
 
       const glassGeo = new THREE.LatheGeometry(points, 64);
       const glassMat = new THREE.MeshPhysicalMaterial({
-          color: 0x8a4b00, 
-          transmission: 0.98,
+          color: 0xffffff, // White base allows light to enter, Color comes from Attenuation
+          transmission: 1.0,
           opacity: 1,
           metalness: 0.0,
-          roughness: 0.05, 
+          roughness: 0.0, 
           ior: 1.5,
-          thickness: 3.0, 
-          attenuationColor: new THREE.Color('#3f2105'), 
-          attenuationDistance: 25.0, 
+          thickness: 2.0, 
+          attenuationColor: new THREE.Color(0xcc7a00), // Amber Tint
+          attenuationDistance: 40.0, 
           side: THREE.DoubleSide
       });
       const bottle = new THREE.Mesh(glassGeo, glassMat);
@@ -586,11 +586,16 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
       
       const liqPoints = points.slice(0, 5).map(p => new THREE.Vector2(p.x * 0.88, p.y < h*0.7 ? p.y + 2 : h*0.7));
       const liqGeo = new THREE.LatheGeometry(liqPoints, 32);
-      const liqMat = new THREE.MeshStandardMaterial({ 
-          color: 0x1a0f00, 
-          roughness: 0.3 
+      // Make liquid transmissive too (like beer) but dark
+      const liqMat = new THREE.MeshPhysicalMaterial({ 
+          color: 0x331a00,
+          transmission: 0.5,
+          roughness: 0.1,
+          metalness: 0,
+          ior: 1.33
       });
       const liquid = new THREE.Mesh(liqGeo, liqMat);
+      liquid.scale.set(0.95, 0.95, 0.95); // Ensure it is inside glass
       setShadows(liquid);
 
       const labelGeo = new THREE.CylinderGeometry(r + 0.1, r + 0.1, h * 0.3, 64, 1, true);
@@ -625,15 +630,15 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
       const aluMat = new THREE.MeshStandardMaterial({
            color: 0xffffff,
            map: createBeerLabelTexture("RoboHops", "Neural IPA", 200),
-           metalness: 0.7, 
-           roughness: 0.25,
-           envMapIntensity: 1.2
+           metalness: 0.6, // Reduced from 0.7 to reduce glare blowout
+           roughness: 0.35, // Increased from 0.25
+           envMapIntensity: 1.0
       });
       const topMat = new THREE.MeshStandardMaterial({ 
           color: 0xe5e5e5, 
-          metalness: 0.95, 
-          roughness: 0.15,
-          envMapIntensity: 1.5
+          metalness: 0.9, 
+          roughness: 0.2,
+          envMapIntensity: 1.2
       });
 
       const bodyH = h * 0.8;
@@ -708,7 +713,7 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
   let ambientIntensity = 0.02 + (baseIntensity * 0.05);
   // Add bounce light for Backlight mode so opaque objects aren't pitch black voids
   if (state.lightPosition === LightPosition.Back) {
-      ambientIntensity += 0.2; 
+      ambientIntensity += 0.5; 
   }
   const ambient = new THREE.AmbientLight(colorHex, ambientIntensity);
   group.add(ambient);
@@ -733,12 +738,9 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
       lightPos.set(0, targetY, -halfD - dist);
       break;
     case LightPosition.Top:
-      // Offset Z by dist*0.5 to create an oblique angle (~60deg incidence) instead of grazing (90deg)
-      // This ensures the front face is illuminated.
       lightPos.set(0, halfH + dist, dist * 0.5); 
       break;
     case LightPosition.Side:
-       // Same logic for Side. Move Z towards camera to illuminate front.
       lightPos.set(halfW + dist, targetY, dist * 0.5);
       break;
     case LightPosition.LowAngle:
@@ -762,17 +764,25 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
 
   const configShadow = (light: THREE.Light) => {
     light.castShadow = true;
-    light.shadow.mapSize.width = 1024;
-    light.shadow.mapSize.height = 1024;
+    light.shadow.mapSize.width = 512; // Reduced from 1024 to save texture units
+    light.shadow.mapSize.height = 512;
     light.shadow.bias = -0.0005;
+    light.shadow.camera.near = 10;
+    light.shadow.camera.far = 2000;
   };
 
   const fixture = state.lightType;
   const config = state.lightConfig;
 
+  // Normalized intensity scale for all lights to ensure 100% intensity ~ 5.0 - 10.0 range
+  // This prevents the "instant white" blowout at 1%
+  const GLOBAL_INTENSITY_SCALE = 10.0;
+
   // Helper to add a spot in Local Space
   const addSpot = (x:number, y:number, z:number, angle:number, intensityMult: number = 1.0) => {
-     const s = new THREE.SpotLight(colorHex, baseIntensity * 100 * intensityMult);
+     // Use normalized intensity scale
+     const intensity = baseIntensity * GLOBAL_INTENSITY_SCALE * intensityMult;
+     const s = new THREE.SpotLight(colorHex, intensity);
      s.position.set(x, y, z);
      
      const targetObj = new THREE.Object3D();
@@ -783,7 +793,7 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
      
      s.angle = angle;
      s.penumbra = 0.5;
-     s.decay = 0;
+     s.decay = 0; // Linear falloff for consistent brightness
      s.distance = 2000;
      configShadow(s);
      fixtureGroup.add(s);
@@ -794,9 +804,10 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
          const standoff = Math.max(halfD + 10, 20); 
          const r = Math.max(dist, halfW + 20); 
 
-         for(let i=0; i<8; i++) {
-            const a = (i/8)*Math.PI*2;
-            const s = new THREE.SpotLight(colorHex, baseIntensity * 200); 
+         const count = 4;
+         for(let i=0; i<count; i++) {
+            const a = (i/count)*Math.PI*2;
+            const s = new THREE.SpotLight(colorHex, baseIntensity * GLOBAL_INTENSITY_SCALE * 0.8); // Scale ~8.0 total
             s.position.set(Math.cos(a)*r, Math.sin(a)*r, standoff);
             s.target.position.set(0, 0, 0);
             s.angle = 0.6; s.penumbra = 0.5; s.decay = 0; s.distance = 1000;
@@ -809,52 +820,44 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
 
      } else {
          const r = 45; 
-         for(let i=0; i<8; i++) {
-             const a = (i/8)*Math.PI*2;
-             addSpot(Math.cos(a)*r, Math.sin(a)*r, 0, 0.6, 25); 
+         const count = 4;
+         for(let i=0; i<count; i++) {
+             const a = (i/count)*Math.PI*2;
+             // Scale ~2.0 per light * 4 lights = 8.0 total
+             addSpot(Math.cos(a)*r, Math.sin(a)*r, 0, 0.6, 0.5); 
          }
          const ringVis = new THREE.Mesh(new THREE.TorusGeometry(r, 4, 8, 32), new THREE.MeshBasicMaterial({ color: visualColor }));
          fixtureGroup.add(ringVis);
      }
   } 
   else if (fixture === LightFixture.Panel) {
-      let size = 300; // Increased size from 200
+      let size = 300; 
       if (config === LightConfig.Small) size = 150;
       if (config === LightConfig.Large) size = 450;
 
+      // UNIFIED LOGIC: Use Single Light Source to save texture units
       if (state.lightPosition === LightPosition.Back) {
-          fixtureGroup.removeFromParent(); 
-          // Boosted intensity significantly for Backlight to ensure it punches through
-          const dl = new THREE.DirectionalLight(colorHex, baseIntensity * 5);
-          
-          dl.position.set(0, targetY, -halfD - dist);
-          dl.target.position.set(0, targetY, 0);
-          configShadow(dl);
-          
-          const d = size / 2;
-          dl.shadow.camera.left = -d; dl.shadow.camera.right = d;
-          dl.shadow.camera.top = d; dl.shadow.camera.bottom = -d;
-          group.add(dl); group.add(dl.target);
-          
-          const plane = new THREE.Mesh(
-              new THREE.PlaneGeometry(size, size), 
-              new THREE.MeshBasicMaterial({ color: visualColor, side: THREE.DoubleSide })
-          );
-          plane.position.set(0, targetY, -halfD - dist);
-          plane.lookAt(0, targetY, 0);
-          group.add(plane);
+           // Directional Light for Backlight (Simulates infinite panel)
+           // Scale ~3.0 for background
+           const dl = new THREE.DirectionalLight(colorHex, baseIntensity * 3.0);
+           dl.position.set(0, 0, 0); 
+           const t = new THREE.Object3D(); t.position.set(0, 0, 100); fixtureGroup.add(t); dl.target = t;
+           configShadow(dl);
+           
+           const d = size/2;
+           dl.shadow.camera.left = -d; dl.shadow.camera.right = d;
+           dl.shadow.camera.top = d; dl.shadow.camera.bottom = -d;
+           fixtureGroup.add(dl);
       } else {
-          // Front Panel/Bar mode: Boost intensity
-          const d = size / 4;
-          const panelInt = 20; // increased from 10
-          addSpot(-d, -d, 0, 0.9, panelInt);
-          addSpot(d, -d, 0, 0.9, panelInt);
-          addSpot(-d, d, 0, 0.9, panelInt);
-          addSpot(d, d, 0, 0.9, panelInt);
-          
-          const plane = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ color: visualColor }));
-          fixtureGroup.add(plane);
+           // Spot for others
+           addSpot(0, 0, 0, 1.2, 1.0); 
       }
+      
+      const plane = new THREE.Mesh(
+          new THREE.PlaneGeometry(size, size), 
+          new THREE.MeshBasicMaterial({ color: visualColor, side: THREE.DoubleSide })
+      );
+      fixtureGroup.add(plane);
   }
   else if (fixture === LightFixture.Bar) {
       const len = 100;
@@ -865,21 +868,37 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
           barGroup.rotation.z = rotZ;
           groupToAddTo.add(barGroup);
 
-          // Increased intensity multiplier significantly (120 -> 250)
-          // Increased number of spots from 3 to 5 for continuous coverage
-          const spotInt = 250;
-          const step = len / 4; 
-          for(let i=0; i<5; i++) {
-             const xPos = -len/2 + (i * step);
+          let count = 3;
+          let intensityMult = 1.0;
+
+          if (config === LightConfig.Quad) {
+             count = 1; 
+             intensityMult = 3.0; // Boost single light intensity
+          } else if (config === LightConfig.Dual) {
+             count = 2; 
+             intensityMult = 1.5;
+          }
+
+          // Target ~8.0-10.0 total intensity for bar
+          const spotInt = GLOBAL_INTENSITY_SCALE * intensityMult;
+          
+          if (count === 1) {
              const s = new THREE.SpotLight(colorHex, baseIntensity * spotInt);
-             s.position.set(xPos, 0, 0);
-             const t = new THREE.Object3D(); 
-             t.position.set(xPos, 0, 100);
-             barGroup.add(t); 
-             s.target = t; 
-             s.angle = 0.9; 
-             configShadow(s); 
-             barGroup.add(s);
+             // Move light slightly forward (Z=5) to avoid self-shadowing from the casing (which goes from -5 to +5)
+             s.position.set(0, 0, 6);
+             const t = new THREE.Object3D(); t.position.set(0, 0, 100); barGroup.add(t); s.target = t;
+             s.angle = 1.0; configShadow(s); barGroup.add(s);
+          } else {
+              const step = len / (count - 1 || 1); 
+              for(let i=0; i<count; i++) {
+                 const xPos = (-len/2) + (i * step);
+                 // Distribute intensity
+                 const s = new THREE.SpotLight(colorHex, baseIntensity * spotInt / count * 1.5);
+                 // Move light slightly forward
+                 s.position.set(xPos, 0, 6);
+                 const t = new THREE.Object3D(); t.position.set(xPos, 0, 100); barGroup.add(t); s.target = t;
+                 s.angle = 0.9; configShadow(s); barGroup.add(s);
+              }
           }
 
           const vis = new THREE.Mesh(new THREE.BoxGeometry(len, 20, 10), new THREE.MeshBasicMaterial({ color: 0x334155 }));
@@ -940,13 +959,13 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
   }
   else if (fixture === LightFixture.Spot) {
       const angle = config === LightConfig.Narrow ? 0.2 : 0.6;
-      addSpot(0, 0, 0, angle, 400); // Boosted from 200 to 400
+      addSpot(0, 0, 0, angle, 1.5); // ~15.0 total
       const spotVis = new THREE.Mesh(new THREE.CylinderGeometry(5, 10, 15), new THREE.MeshBasicMaterial({ color: visualColor }));
       spotVis.rotation.x = Math.PI/2;
       fixtureGroup.add(spotVis);
   }
   else if (fixture === LightFixture.Coaxial) {
-      addSpot(0, 0, 0, 0.25, 400); // Boosted from 250 to 400
+      addSpot(0, 0, 0, 0.25, 1.2); // ~12.0 total
       const box = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 40), new THREE.MeshBasicMaterial({ color: visualColor }));
       if (state.lightPosition === LightPosition.Camera) {
           box.position.x = 40; 

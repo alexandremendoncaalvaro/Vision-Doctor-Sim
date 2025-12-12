@@ -78,7 +78,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
           case LightFixture.Ring:
             return [LightPosition.Camera, LightPosition.LowAngle];
           case LightFixture.Bar:
-            return [LightPosition.Top, LightPosition.Side, LightPosition.LowAngle];
+            // Added Backlight support to match Panel capabilities
+            return [LightPosition.Back, LightPosition.Top, LightPosition.Side, LightPosition.LowAngle];
           case LightFixture.Coaxial:
             return [LightPosition.Camera];
           case LightFixture.Spot:
@@ -222,6 +223,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
              </div>
           </div>
 
+          {/* 
           <button
             onClick={handleAutoTune}
             className="w-full mt-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold py-3 px-3 rounded flex items-center justify-center gap-2 shadow-md transition-all border border-white/10 ring-1 ring-white/20"
@@ -229,6 +231,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
           >
             <Wand2 size={16} /> {t.autoTune}
           </button>
+          */}
         </section>
 
         {/* 3. View & Orientation */}
