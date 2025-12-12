@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { SimulationState, OpticalMetrics, LightColor, LightFixture, LightPosition, LightConfig, ObjectType, Language, GlobalEnv } from '../types';
+import { SimulationState, OpticalMetrics, LightColor, LightFixture, LightPosition, LightConfig, ObjectType, Language, GlobalEnv, BackgroundPattern } from '../types';
 import { OBJECT_DIMS } from '../constants';
 import { TEXTS } from '../translations';
 
@@ -28,6 +28,9 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
   // Store the env map texture so we don't regenerate it every frame
   const envMapRef = useRef<THREE.Texture | null>(null);
 
+  // Background Pattern Cache
+  const patternsRef = useRef<Record<string, THREE.Texture>>({});
+
   // State Refs
   const viewTypeRef = useRef(viewType);
   const keysPressed = useRef<Set<string>>(new Set());
@@ -36,7 +39,7 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
   const lightsGroupRef = useRef<THREE.Group | null>(null);
   const objectGroupRef = useRef<THREE.Group | null>(null);
   const camModelRef = useRef<THREE.Group | null>(null);
-  const enclosureRef = useRef<THREE.Mesh | null>(null);
+  const enclosureGroupRef = useRef<THREE.Group | null>(null);
 
   useEffect(() => {
     viewTypeRef.current = viewType;
@@ -96,19 +99,35 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     controls.dampingFactor = 0.05;
     controlsRef.current = controls;
 
-    // --- ENCLOSURE (Physical Studio Box) ---
-    // Stainless Steel Cabinet look
-    const enclosureGeo = new THREE.BoxGeometry(4000, 4000, 4000);
+    // --- ENCLOSURE GROUP ---
+    const enclosureGroup = new THREE.Group();
+    scene.add(enclosureGroup);
+    enclosureGroupRef.current = enclosureGroup;
+
+    // 1. Physical Box (Walls)
+    // 1200mm = 1.2 meters. Realistic cabinet size.
+    const size = 1200;
+    const enclosureGeo = new THREE.BoxGeometry(size, size, size);
     const enclosureMat = new THREE.MeshStandardMaterial({ 
         color: 0x707070, // Medium grey (Stainless Steel base)
-        roughness: 0.4,  // Semi-reflective (Satin finish)
-        metalness: 0.7,  // High metalness
+        roughness: 0.5,  
+        metalness: 0.6, 
         side: THREE.BackSide 
     });
     const enclosure = new THREE.Mesh(enclosureGeo, enclosureMat);
     enclosure.receiveShadow = true;
-    scene.add(enclosure);
-    enclosureRef.current = enclosure;
+    enclosureGroup.add(enclosure);
+
+    // 2. Structural Frame (Edges)
+    const edges = new THREE.EdgesGeometry(enclosureGeo);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x475569, opacity: 0.5, transparent: true });
+    const frame = new THREE.LineSegments(edges, lineMat);
+    enclosureGroup.add(frame);
+
+    // 3. Floor Grid
+    const grid = new THREE.GridHelper(size, 12, 0x444444, 0x222222);
+    grid.position.y = -size / 2 + 1; // Slightly above floor to avoid z-fighting
+    enclosureGroup.add(grid);
 
     const lightsGroup = new THREE.Group();
     scene.add(lightsGroup);
@@ -192,23 +211,49 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     };
   }, []);
 
-  // --- UPDATES ---
-
-  // Handle Background Color (Only applies if NOT in Studio Mode)
+  // --- BACKGROUND UPDATE ---
   useEffect(() => {
-    if (!sceneRef.current || !enclosureRef.current) return;
+    if (!sceneRef.current || !enclosureGroupRef.current) return;
+
+    // Function to get or create pattern
+    const getPattern = (type: BackgroundPattern) => {
+        if (patternsRef.current[type]) return patternsRef.current[type];
+        
+        let tex: THREE.Texture;
+        if (type === BackgroundPattern.Level1) {
+            tex = createLevel1Texture();
+        } else if (type === BackgroundPattern.Level2) {
+            tex = createLevel2Texture();
+        } else if (type === BackgroundPattern.Level3) {
+            tex = createLevel3Texture();
+        } else {
+            return null;
+        }
+
+        // Configure texture to wrap for background usage
+        tex.mapping = THREE.EquirectangularReflectionMapping; 
+        tex.colorSpace = THREE.SRGBColorSpace;
+        patternsRef.current[type] = tex;
+        return tex;
+    };
 
     if (state.globalEnv === GlobalEnv.Studio) {
-         // In Studio Mode, we use the physical enclosure.
-         // We set background to null so the "BackSide" mesh is visible.
          sceneRef.current.background = null; 
-         enclosureRef.current.visible = true;
+         enclosureGroupRef.current.visible = true;
     } else {
-         // In Factory/Sunlight, we use the abstract background color or map.
-         sceneRef.current.background = new THREE.Color(state.backgroundColor);
-         enclosureRef.current.visible = false;
+         // Factory / Sunlight
+         enclosureGroupRef.current.visible = false;
+         
+         if (state.backgroundPattern && state.backgroundPattern !== BackgroundPattern.None) {
+             // Use Pattern
+             const tex = getPattern(state.backgroundPattern);
+             if (tex) sceneRef.current.background = tex;
+         } else {
+             // Use Solid Color
+             sceneRef.current.background = new THREE.Color(state.backgroundColor);
+         }
     }
-  }, [state.backgroundColor, state.globalEnv]);
+  }, [state.backgroundColor, state.globalEnv, state.backgroundPattern]);
 
   useEffect(() => {
     if (rendererRef.current) {
@@ -263,7 +308,7 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     camModelRef.current.lookAt(0, targetY, 0);
     camModelRef.current.visible = viewType === 'free'; 
 
-    updateObject(objectGroupRef.current, state.objectType, state.objectOrientation);
+    updateObject(objectGroupRef.current, state);
     
     updateLights(lightsGroupRef.current, state, camY, camZ, targetY);
 
@@ -360,6 +405,106 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     </div>
   );
 };
+
+// --- PROCEDURAL TEXTURE GENERATION (ABSTRACT NOISE) ---
+
+// Level 1: Low (Chromatic Grain / RGB Noise)
+function createLevel1Texture(): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+        // Base dark gray
+        ctx.fillStyle = '#222';
+        ctx.fillRect(0,0,512,512);
+
+        // Chromatic noise
+        for(let i=0; i<30000; i++) {
+           const r = Math.floor(Math.random() * 150);
+           const g = Math.floor(Math.random() * 150);
+           const b = Math.floor(Math.random() * 150);
+           ctx.fillStyle = `rgba(${r},${g},${b},0.3)`; 
+           ctx.fillRect(Math.random()*512, Math.random()*512, 2, 2);
+        }
+    }
+    return new THREE.CanvasTexture(canvas);
+}
+
+// Level 2: Medium (Colored Geometric Clutter)
+function createLevel2Texture(): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+         // Base dark
+         ctx.fillStyle = '#1a1a1a';
+         ctx.fillRect(0,0,512,512);
+
+         // Industrial Palette Clutter (Browns, Yellows, Blues, Grays)
+         const colors = ['#8b4513', '#cd853f', '#eebb00', '#4682b4', '#708090', '#556b2f'];
+
+         // Random Blocks/Shapes
+         for(let i=0; i<40; i++) {
+             ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+             ctx.fillRect(Math.random()*512, Math.random()*512, 20 + Math.random()*100, 20 + Math.random()*100);
+         }
+
+         // Overlays for depth
+         ctx.fillStyle = 'rgba(0,0,0,0.3)';
+         for(let i=0; i<10; i++) {
+             ctx.fillRect(Math.random()*512, 0, Math.random()*50, 512);
+         }
+    }
+    return new THREE.CanvasTexture(canvas);
+}
+
+// Level 3: High (Intense Multi-Colored Chaos)
+function createLevel3Texture(): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+        // Black base
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0,0,512,512);
+        
+        // High saturation confetti / interference
+        for(let i=0; i<2000; i++) {
+             // Random bright colors
+             const hue = Math.floor(Math.random() * 360);
+             ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+             const s = 2 + Math.random() * 6;
+             ctx.fillRect(Math.random()*512, Math.random()*512, s, s);
+        }
+
+        // Random chaotic lines
+        ctx.lineWidth = 2;
+        for(let i=0; i<30; i++) {
+            const hue = Math.floor(Math.random() * 360);
+            ctx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
+            ctx.beginPath();
+            ctx.moveTo(Math.random()*512, Math.random()*512);
+            ctx.lineTo(Math.random()*512, Math.random()*512);
+            ctx.stroke();
+        }
+
+        // Large interfering blobs
+        for(let i=0; i<5; i++) {
+            const hue = Math.floor(Math.random() * 360);
+            ctx.fillStyle = `hsla(${hue}, 100%, 50%, 0.2)`;
+            const x = Math.random()*512;
+            const y = Math.random()*512;
+            const r = 50 + Math.random()*100;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    return new THREE.CanvasTexture(canvas);
+}
 
 // --- HELPERS ---
 
@@ -541,7 +686,10 @@ function createRealisticCrownCap(radius: number): THREE.Group {
   return group;
 }
 
-function updateObject(group: THREE.Group, type: ObjectType, orientation: string) {
+function updateObject(group: THREE.Group, state: SimulationState) {
+  const type = state.objectType;
+  const orientation = state.objectOrientation;
+
   while(group.children.length > 0){ 
     const child = group.children[0];
     group.remove(child);
@@ -552,11 +700,29 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
     }
   }
 
+  // Handle Rotation
   group.rotation.set(0,0,0);
-  if (orientation === 'Side') group.rotation.y = -Math.PI / 2;
-  else if (orientation === 'Back') group.rotation.y = Math.PI;
-  else if (orientation === 'Top') group.rotation.x = Math.PI / 2; 
-  else if (orientation === 'Bottom') group.rotation.x = -Math.PI / 2;
+  
+  if (orientation === 'Custom') {
+     // Apply full 6-DOF
+     group.position.set(state.objectShiftX, state.objectShiftY, state.objectShiftZ);
+     
+     // Convert Degrees to Radians
+     const rx = (state.objectRotX * Math.PI) / 180;
+     const ry = (state.objectRotY * Math.PI) / 180;
+     const rz = (state.objectRotZ * Math.PI) / 180;
+     
+     group.rotation.set(rx, ry, rz);
+  } else {
+     // Standard Presets - RESET Position to center
+     group.position.set(0,0,0);
+
+     if (orientation === 'Side') group.rotation.y = -Math.PI / 2;
+     else if (orientation === 'Back') group.rotation.y = Math.PI;
+     else if (orientation === 'Top') group.rotation.x = Math.PI / 2; 
+     else if (orientation === 'Bottom') group.rotation.x = -Math.PI / 2;
+     // Front is default 0,0,0
+  }
 
   const setShadows = (mesh: THREE.Object3D) => {
     mesh.castShadow = true;
@@ -750,19 +916,23 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
   // 1. GLOBAL ILLUMINATION (INDEPENDENT of Fixture)
   const globalInt = state.globalIntensity / 100; // 0 to 1
   
+  // --- CALCULATE TOTAL INTENSITY WITH MULTIPLIER ---
+  // Default to 1 if undefined for safety
+  const multiplier = state.lightMultiplier || 1;
+  const intensityPercent = state.lightIntensity;
+  const baseIntensity = (intensityPercent / 100) * multiplier;
+  const colorHex = getLightColorHex(state.lightColor);
+
   if (state.globalEnv === GlobalEnv.Studio) {
       // PITCH BLACK STUDIO (PHYSICAL BOX):
-      // In Three.js, light doesn't bounce off walls automatically (no GI).
-      // We must SIMULATE the light bouncing off the metallic enclosure walls.
-      // If there is a strong light, we add a proportional Ambient/Hemi light
-      // to "fill" the shadows, simulating the bounce inside the cabinet.
+      // Calculate bounce based on the scaled intensity. 
+      // Multiplier affects bounce light too, making the room brighter when strobing.
       
-      const bounceIntensity = (state.lightIntensity / 100) * 0.15; // 15% bounce
+      const bounceIntensity = baseIntensity * 0.15; // 15% bounce of total power
       if (bounceIntensity > 0.01) {
           // Use light color for the bounce
-          const lightHex = getLightColorHex(state.lightColor);
           // Hemisphere light: Sky = Light Color, Ground = Dark Floor Color
-          const bounce = new THREE.HemisphereLight(lightHex, 0x111111, bounceIntensity);
+          const bounce = new THREE.HemisphereLight(colorHex, 0x111111, bounceIntensity);
           group.add(bounce);
       } else {
           // Absolute minimum visibility
@@ -790,9 +960,6 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
 
   // 2. FIXTURE ILLUMINATION
   
-  const intensityPercent = state.lightIntensity;
-  const baseIntensity = intensityPercent / 100;
-  const colorHex = getLightColorHex(state.lightColor);
   const dist = state.lightDistance || 200;
   
   // Helper for Shadows
@@ -826,7 +993,8 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
            color: colorHex,
            side: THREE.BackSide, 
            transparent: true,
-           opacity: 0.1 + (baseIntensity * 0.3), 
+           // Visual opacity doesn't scale with multiplier to avoid blinding the user's view of the 3D model
+           opacity: 0.1 + (intensityPercent/100 * 0.3), 
        });
        const domeMesh = new THREE.Mesh(geo, mat);
        if (isTunnel) {

@@ -74,7 +74,7 @@ export const TEXTS = {
     targetObject: "Objeto Alvo",
     inspectionGoal: "Objetivo da Inspeção",
     cameraFocus: "Foco da Câmera",
-    objOrientation: "Orientação do Objeto",
+    objOrientation: "Orientación do Objeto",
     sensorFormat: "Formato do Sensor",
     focalLength: "Distância Focal (mm)",
     aperture: "Abertura (f-stop)",
@@ -86,9 +86,11 @@ export const TEXTS = {
     lightDist: "Distância da Luz (mm)",
     lightColor: "Cor da Luz",
     lightIntensity: "Intensidade da Luz",
+    lightMultiplier: "Multiplicador de Intensidade",
     exposureTime: "Tempo de Exposição",
     sensorGain: "Ganho do Sensor",
     background: "Fundo",
+    visualNoise: "Poluição Visual",
     lineSpeed: "Velocidade da Linha",
     vibration: "Nível de Vibração",
     roiSize: "Tamanho da ROI",
@@ -111,7 +113,7 @@ export const TEXTS = {
         Top: "Topo", Middle: "Meio", Bottom: "Fundo", Whole: "Inteiro"
     },
     orientation: {
-        Front: "Frente", Side: "Lado", Back: "Trás", Top: "Topo", Bottom: "Baixo"
+        Front: "Frente", Side: "Lado", Back: "Trás", Top: "Topo", Bottom: "Baixo", Custom: "Personalizado (6-DOF)"
     },
     fixtures: {
         "Ring Light": "Anel (Ring)",
@@ -148,6 +150,11 @@ export const TEXTS = {
         "Factory Floor": "Fábrica (Luz Fria)",
         "Direct Sunlight": "Luz Solar (Direta)"
     },
+    patterns: {
+        "Level 1 (Low)": "Baixa",
+        "Level 2 (Medium)": "Média",
+        "Level 3 (High)": "Alta"
+    },
     
     schematic: "Esquemático",
     simulator: "Simulador",
@@ -173,7 +180,7 @@ export const TEXTS = {
     
     statFov: "FOV (H x V)",
     statMag: "Ampliação",
-    statDof: "Profundidade de Campo",
+    statDof: "Profundidad de Campo",
     
     hudSensor: "VISÃO DO SENSOR",
     hudWorld: "VISÃO DO MUNDO",
@@ -192,7 +199,10 @@ export const TEXTS = {
     valDark: "Escuro",
     valBright: "Claro",
     valWrongGeo: "Luz Bloqueando Câmera",
-    valWrongTech: "Técnica Incorreta"
+    valWrongTech: "Técnica Incorreta",
+
+    dofPos: "Pos",
+    dofRot: "Rot"
   },
   'en': {
     appTitle: "Vision Doctor Simulator",
@@ -217,9 +227,11 @@ export const TEXTS = {
     lightDist: "Light Distance (mm)",
     lightColor: "Light Color",
     lightIntensity: "Light Intensity",
+    lightMultiplier: "Intensity Multiplier",
     exposureTime: "Exposure Time",
     sensorGain: "Sensor Gain",
     background: "Background",
+    visualNoise: "Visual Noise / Clutter",
     lineSpeed: "Line Speed",
     vibration: "Vibration Level",
     roiSize: "ROI Size",
@@ -241,7 +253,7 @@ export const TEXTS = {
         Top: "Top", Middle: "Middle", Bottom: "Bottom", Whole: "Whole"
     },
     orientation: {
-        Front: "Front", Side: "Side", Back: "Back", Top: "Top", Bottom: "Bottom"
+        Front: "Front", Side: "Side", Back: "Back", Top: "Top", Bottom: "Bottom", Custom: "Custom (6-DOF)"
     },
     fixtures: {
         "Ring Light": "Ring Light",
@@ -277,6 +289,11 @@ export const TEXTS = {
         "Studio (Dark Box)": "Studio (Dark Box)",
         "Factory Floor": "Factory Floor (Cool)",
         "Direct Sunlight": "Direct Sunlight"
+    },
+    patterns: {
+        "Level 1 (Low)": "Level 1 (Low)",
+        "Level 2 (Medium)": "Level 2 (Medium)",
+        "Level 3 (High)": "Level 3 (High)"
     },
     schematic: "Schematic",
     simulator: "Simulator",
@@ -316,7 +333,9 @@ export const TEXTS = {
     valDark: "Dark",
     valBright: "Bright",
     valWrongGeo: "Light Blocking Camera",
-    valWrongTech: "Wrong Technique"
+    valWrongTech: "Wrong Technique",
+    dofPos: "Pos",
+    dofRot: "Rot"
   },
   'es': {
     appTitle: "Simulador Vision Doctor",
@@ -341,9 +360,11 @@ export const TEXTS = {
     lightDist: "Distancia de Luz (mm)",
     lightColor: "Color de Luz",
     lightIntensity: "Intensidad de Luz",
+    lightMultiplier: "Multiplicador de Intensidad",
     exposureTime: "Tiempo de Exposición",
     sensorGain: "Ganancia del Sensor",
     background: "Fondo",
+    visualNoise: "Ruido Visual",
     lineSpeed: "Velocidad de Línea",
     vibration: "Nivel de Vibración",
     roiSize: "Tamaño de ROI",
@@ -364,7 +385,7 @@ export const TEXTS = {
         Top: "Superior", Middle: "Medio", Bottom: "Inferior", Whole: "Entero"
     },
     orientation: {
-        Front: "Frente", Side: "Lado", Back: "Atrás", Top: "Superior", Bottom: "Inferior"
+        Front: "Frente", Side: "Lado", Back: "Atrás", Top: "Superior", Bottom: "Inferior", Custom: "Personalizado (6-DOF)"
     },
     fixtures: {
         "Ring Light": "Anillo (Ring)",
@@ -400,6 +421,11 @@ export const TEXTS = {
         "Studio (Dark Box)": "Estudio (Caja Oscura)",
         "Factory Floor": "Fábrica (Luz Fría)",
         "Direct Sunlight": "Luz Solar (Directa)"
+    },
+    patterns: {
+        "Level 1 (Low)": "Bajo",
+        "Level 2 (Medium)": "Medio",
+        "Level 3 (High)": "Alto"
     },
     schematic: "Esquemático",
     simulator: "Simulador",
@@ -439,6 +465,8 @@ export const TEXTS = {
     valDark: "Oscuro",
     valBright: "Brillante",
     valWrongGeo: "Luz Bloquea Cámara",
-    valWrongTech: "Técnica Incorrecta"
+    valWrongTech: "Técnica Incorrecta",
+    dofPos: "Pos",
+    dofRot: "Rot"
   }
 };

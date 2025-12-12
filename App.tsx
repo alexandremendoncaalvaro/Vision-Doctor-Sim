@@ -10,7 +10,8 @@ import {
   OpticalMetrics,
   ValidationResult,
   Language,
-  GlobalEnv
+  GlobalEnv,
+  BackgroundPattern
 } from './types';
 import { SENSOR_SPECS, OBJECT_DIMS, OBJECT_GOALS } from './constants';
 import ControlPanel from './components/ControlPanel';
@@ -36,12 +37,21 @@ const App: React.FC = () => {
     viewFocus: 'Middle',
     objectOrientation: 'Front',
     
+    // 6-DOF Defaults
+    objectShiftX: 0,
+    objectShiftY: 0,
+    objectShiftZ: 0,
+    objectRotX: 0,
+    objectRotY: 0,
+    objectRotZ: 0,
+    
     lightType: LightFixture.Ring,
     lightPosition: LightPosition.Camera,
     lightConfig: LightConfig.Single,
     lightDistance: 200,
     lightColor: LightColor.White,
     lightIntensity: 60,
+    lightMultiplier: 100,
     
     // New Global Environment States
     globalEnv: GlobalEnv.Studio,
@@ -51,6 +61,7 @@ const App: React.FC = () => {
     gain: 0,
     // New Fields
     backgroundColor: '#050505',
+    backgroundPattern: BackgroundPattern.None,
     objectSpeed: 0,
     vibrationLevel: 0,
     roiX: 0.5,
@@ -94,7 +105,10 @@ const App: React.FC = () => {
     // Account for global light in exposure estimate roughly (simplified)
     const globalLightAdd = (state.globalIntensity / 100) * 0.5;
     
-    const exposureValue = (state.exposureTime / 5000) * (Math.pow(2.8, 2) / Math.pow(state.aperture, 2)) * gainFactor * (1 + globalLightAdd);
+    // Intensity factor now includes multiplier
+    const lightFactor = (state.lightIntensity / 60) * (state.lightMultiplier || 1);
+
+    const exposureValue = (state.exposureTime / 5000) * (Math.pow(2.8, 2) / Math.pow(state.aperture, 2)) * gainFactor * (1 + globalLightAdd) * lightFactor;
 
     return {
       fovWidth,
@@ -147,14 +161,16 @@ const App: React.FC = () => {
     }
 
     // 3. Exposure Check
+    // Adjust thresholds for exposure check to be more lenient with high power
     if (metrics.exposureValue < 0.25) res.exposure = 'dark';
-    else if (metrics.exposureValue > 4.0) res.exposure = 'bright';
-    else if (metrics.exposureValue < 0.5 || metrics.exposureValue > 2.0) res.exposure = 'good'; // Actually lets say acceptable range 0.5 - 2.0
+    else if (metrics.exposureValue > 8.0) res.exposure = 'bright';
+    else if (metrics.exposureValue < 0.5 || metrics.exposureValue > 4.0) res.exposure = 'good'; 
     
     // 4. Contrast Check (Simulated)
     const bg = state.backgroundColor;
+    const pattern = state.backgroundPattern;
     const obj = state.objectType;
-    const isDarkBg = bg === '#050505' || bg === '#064e3b' || bg === '#1e3a8a';
+    const isDarkBg = (bg === '#050505' || bg === '#064e3b' || bg === '#1e3a8a') && pattern === BackgroundPattern.None;
     
     // Logic: If inspecting outline/shape (Presence, Dimensions), contrast with BG is critical.
     // If inspecting surface (OCR, Codes, Scratches), BG contrast matters less.
@@ -167,8 +183,13 @@ const App: React.FC = () => {
 
     if (!isSurfaceGoal) {
         if (obj === ObjectType.PCB && isDarkBg) res.contrast = 'poor';
-        if (obj === ObjectType.MatteBlock && bg === '#475569') res.contrast = 'poor'; // Gray on Gray
+        if (obj === ObjectType.MatteBlock && bg === '#475569' && pattern === BackgroundPattern.None) res.contrast = 'poor'; // Gray on Gray
         if (obj === ObjectType.AluminumCan && !isDarkBg) res.contrast = 'poor'; // Silver on White/Gray
+    }
+
+    // High clutter patterns always impact contrast for transparent objects or edge checks
+    if (pattern !== BackgroundPattern.None && !isSurfaceGoal) {
+        if (obj === ObjectType.GlassBottle) res.contrast = 'poor';
     }
 
     // 5. Technique & Geometry Check

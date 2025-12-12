@@ -10,12 +10,13 @@ import {
   ViewFocus,
   ObjectOrientation,
   Language,
-  GlobalEnv
+  GlobalEnv,
+  BackgroundPattern
 } from '../types';
 import { STANDARD_FOCAL_LENGTHS, STANDARD_APERTURES, OBJECT_GOALS } from '../constants';
 import { TEXTS, GOAL_TRANSLATIONS } from '../translations';
 import { getPreset } from '../presets';
-import { Camera, Lightbulb, Box, Activity, Target, RotateCw, Wind, Palette, Scan, Signal, Eye, Move3d, Wand2, Sun } from 'lucide-react';
+import { Camera, Lightbulb, Box, Activity, Target, RotateCw, Wind, Palette, Scan, Signal, Eye, Move3d, Wand2, Sun, Zap, Move, Factory, Grip } from 'lucide-react';
 
 interface ControlPanelProps {
   state: SimulationState;
@@ -184,37 +185,75 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
           </div>
 
           {state.globalEnv !== GlobalEnv.Studio && (
-             <div className="space-y-1 animate-in fade-in slide-in-from-top-2">
-               <label className="text-xs text-slate-500">{t.globalIntensity} ({state.globalIntensity}%)</label>
-               <input 
-                 type="range" 
-                 min="0" 
-                 max="100" 
-                 value={state.globalIntensity}
-                 onChange={(e) => handleChange('globalIntensity', Number(e.target.value))}
-                 className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
-               />
-            </div>
-          )}
-
-          <hr className="border-slate-800" />
-
-          <div className="space-y-1">
-             <label className="text-xs text-slate-500 flex items-center gap-1">
-                <Palette size={10} /> {t.background}
-             </label>
-             <div className="flex gap-2">
-                {backgroundOptions.map((bg) => (
-                  <button
-                    key={bg.value}
-                    onClick={() => handleChange('backgroundColor', bg.value)}
-                    className={`w-6 h-6 rounded-full border border-slate-600 ${state.backgroundColor === bg.value ? 'ring-2 ring-blue-500' : ''}`}
-                    style={{ backgroundColor: bg.value }}
-                    title={bg.name}
+             <>
+                <div className="space-y-1 animate-in fade-in slide-in-from-top-2">
+                  <label className="text-xs text-slate-500">{t.globalIntensity} ({state.globalIntensity}%)</label>
+                  <input 
+                    type="range" 
+                    min="0" 
+                    max="100" 
+                    value={state.globalIntensity}
+                    onChange={(e) => handleChange('globalIntensity', Number(e.target.value))}
+                    className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
                   />
-                ))}
-             </div>
-          </div>
+                </div>
+
+                <hr className="border-slate-800" />
+
+                {/* BACKGROUND CONTROLS - ONLY SHOW IF NOT STUDIO */}
+                <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                  <label className="text-xs text-slate-500 flex items-center gap-1">
+                      <Palette size={10} /> {t.background}
+                  </label>
+                  
+                  {/* Row 1: Solid Colors */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Solid</span>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => {
+                                handleChange('backgroundColor', '#050505');
+                                handleChange('backgroundPattern', BackgroundPattern.None);
+                            }}
+                            className={`w-6 h-6 rounded-full border border-slate-600 flex items-center justify-center ${state.backgroundPattern === BackgroundPattern.None && state.backgroundColor === '#050505' ? 'ring-2 ring-blue-500' : ''}`}
+                            style={{ backgroundColor: '#050505' }}
+                            title="Dark"
+                        />
+                        {backgroundOptions.slice(1).map((bg) => (
+                          <button
+                            key={bg.value}
+                            onClick={() => {
+                                handleChange('backgroundColor', bg.value);
+                                handleChange('backgroundPattern', BackgroundPattern.None);
+                            }}
+                            className={`w-6 h-6 rounded-full border border-slate-600 ${state.backgroundPattern === BackgroundPattern.None && state.backgroundColor === bg.value ? 'ring-2 ring-blue-500' : ''}`}
+                            style={{ backgroundColor: bg.value }}
+                            title={bg.name}
+                          />
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* Row 2: Abstract Patterns */}
+                  <div className="space-y-1">
+                      <span className="text-[10px] text-slate-500 uppercase tracking-wider font-bold flex items-center gap-1">
+                          <Grip size={10}/> {t.visualNoise}
+                      </span>
+                      <div className="flex gap-1 flex-wrap">
+                        {[BackgroundPattern.Level1, BackgroundPattern.Level2, BackgroundPattern.Level3].map((pat) => (
+                            <button
+                              key={pat}
+                              onClick={() => handleChange('backgroundPattern', pat)}
+                              className={`px-2 py-1 text-[10px] rounded border ${state.backgroundPattern === pat ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}
+                            >
+                              {t.patterns[pat] || pat}
+                            </button>
+                        ))}
+                      </div>
+                  </div>
+                </div>
+             </>
+          )}
 
           <div className="space-y-1">
              <label className="text-xs text-slate-500">{t.lineSpeed} ({state.objectSpeed} mm/s)</label>
@@ -295,11 +334,61 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
                 value={state.objectOrientation}
                 onChange={(e) => handleChange('objectOrientation', e.target.value)}
              >
-               {(['Front', 'Side', 'Back', 'Top', 'Bottom'] as ObjectOrientation[]).map((o) => (
+               {(['Front', 'Side', 'Back', 'Top', 'Bottom', 'Custom'] as ObjectOrientation[]).map((o) => (
                  <option key={o} value={o}>{t.orientation[o]}</option>
                ))}
              </select>
           </div>
+
+          {/* 6-DOF SLIDERS - Only show if orientation is 'Custom' */}
+          {state.objectOrientation === 'Custom' && (
+             <div className="space-y-2 p-2 bg-slate-800/50 rounded-md border border-slate-700 animate-in fade-in slide-in-from-top-2">
+                 <div className="text-[10px] uppercase text-slate-500 font-bold tracking-wider flex items-center gap-1">
+                    <Move size={10}/> 6-DOF Customization
+                 </div>
+                 
+                 {/* Position XYZ */}
+                 <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { l: 'X', k: 'objectShiftX' },
+                      { l: 'Y', k: 'objectShiftY' },
+                      { l: 'Z', k: 'objectShiftZ' }
+                    ].map(({l, k}) => (
+                        <div key={k} className="space-y-0.5">
+                           <label className="text-[10px] text-slate-400 text-center block">{t.dofPos}{l}</label>
+                           <input 
+                              type="range" min="-100" max="100" step="1"
+                              value={state[k as keyof SimulationState] as number}
+                              onChange={(e) => handleChange(k as keyof SimulationState, Number(e.target.value))}
+                              className="w-full h-1 bg-slate-600 rounded cursor-pointer accent-blue-400"
+                              title={`${l}: ${state[k as keyof SimulationState]}`}
+                           />
+                        </div>
+                    ))}
+                 </div>
+                 
+                 {/* Rotation XYZ */}
+                 <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { l: 'X', k: 'objectRotX' },
+                      { l: 'Y', k: 'objectRotY' },
+                      { l: 'Z', k: 'objectRotZ' }
+                    ].map(({l, k}) => (
+                        <div key={k} className="space-y-0.5">
+                           <label className="text-[10px] text-slate-400 text-center block">{t.dofRot}{l}</label>
+                           <input 
+                              type="range" min="0" max="360" step="5"
+                              value={state[k as keyof SimulationState] as number}
+                              onChange={(e) => handleChange(k as keyof SimulationState, Number(e.target.value))}
+                              className="w-full h-1 bg-slate-600 rounded cursor-pointer accent-purple-400"
+                              title={`${l}: ${state[k as keyof SimulationState]}°`}
+                           />
+                        </div>
+                    ))}
+                 </div>
+             </div>
+          )}
+
         </section>
 
         {/* 4. Camera & Lens (Include Exposure/Gain here) */}
@@ -501,8 +590,18 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
              </select>
           </div>
 
-          <div className="space-y-1">
-             <label className="text-xs text-slate-500">{t.lightIntensity} ({state.lightIntensity}%)</label>
+          {/* INTENSITY + MULTIPLIER */}
+          <div className="space-y-2">
+             <div className="flex justify-between items-center">
+                 <label className="text-xs text-slate-500 flex items-center gap-1">
+                     <Zap size={10} className="text-yellow-400" /> 
+                     {t.lightIntensity} ({state.lightIntensity}%)
+                 </label>
+                 <span className="text-xs font-mono text-yellow-400">
+                     {state.lightMultiplier && state.lightMultiplier > 1 ? `x${state.lightMultiplier}` : ''}
+                 </span>
+             </div>
+             
              <input 
                type="range" 
                min="0" 
@@ -511,6 +610,23 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
                onChange={(e) => handleChange('lightIntensity', Number(e.target.value))}
                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
              />
+
+             <div className="flex gap-1">
+                {[1, 10, 100, 1000].map(mult => (
+                    <button
+                        key={mult}
+                        onClick={() => handleChange('lightMultiplier', mult)}
+                        className={`flex-1 py-1 text-[10px] font-mono rounded border ${
+                            (state.lightMultiplier || 1) === mult 
+                            ? 'bg-yellow-600 border-yellow-500 text-white' 
+                            : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                        }`}
+                        title={t.lightMultiplier}
+                    >
+                        x{mult}
+                    </button>
+                ))}
+             </div>
           </div>
         </section>
 

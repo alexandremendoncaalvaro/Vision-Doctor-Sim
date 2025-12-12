@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SimulationState, OpticalMetrics, LightFixture, LightPosition, LightColor, Language } from '../types';
+import { SimulationState, OpticalMetrics, LightFixture, LightPosition, LightColor, Language, GlobalEnv } from '../types';
 import { SENSOR_SPECS, OBJECT_DIMS } from '../constants';
 import { TEXTS } from '../translations';
 import { RectangleHorizontal, RectangleVertical } from 'lucide-react';
@@ -191,6 +191,21 @@ const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics, language 
             {/* --- TRANSFORMED ROOT GROUP --- */}
             <g transform={rootTransform} className="transition-transform duration-500 ease-in-out">
               
+              {/* Enclosure Box (Studio Mode Only) */}
+              {state.globalEnv === GlobalEnv.Studio && (
+                  <rect 
+                    x={-50} 
+                    y={-50} 
+                    width={LOGICAL_W} 
+                    height={LOGICAL_H + 100} 
+                    fill="none" 
+                    stroke="#475569" 
+                    strokeWidth="4" 
+                    strokeDasharray="10,5"
+                    rx="10"
+                  />
+              )}
+
               {/* Optical Axis */}
               <line x1="0" y1={centerlineY} x2={LOGICAL_W} y2={centerlineY} stroke="#334155" strokeDasharray="5,5" />
 

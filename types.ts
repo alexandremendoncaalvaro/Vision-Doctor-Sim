@@ -67,7 +67,14 @@ export enum ObjectType {
 }
 
 export type ViewFocus = 'Top' | 'Middle' | 'Bottom' | 'Whole';
-export type ObjectOrientation = 'Front' | 'Side' | 'Back' | 'Top' | 'Bottom';
+export type ObjectOrientation = 'Front' | 'Side' | 'Back' | 'Top' | 'Bottom' | 'Custom';
+
+export enum BackgroundPattern {
+  None = "None",
+  Level1 = "Level 1 (Low)",
+  Level2 = "Level 2 (Medium)",
+  Level3 = "Level 3 (High)"
+}
 
 export interface SimulationState {
   // Optics
@@ -82,6 +89,14 @@ export interface SimulationState {
   inspectionGoal: string; // Specific goal
   viewFocus: ViewFocus;
   objectOrientation: ObjectOrientation;
+  
+  // 6-DOF Object Control (Used when orientation is Custom)
+  objectShiftX: number;
+  objectShiftY: number;
+  objectShiftZ: number;
+  objectRotX: number;
+  objectRotY: number;
+  objectRotZ: number;
 
   // Lighting
   lightType: LightFixture; 
@@ -90,6 +105,7 @@ export interface SimulationState {
   lightDistance: number; // mm (Distance from object center)
   lightColor: LightColor;
   lightIntensity: number; // 0-100
+  lightMultiplier: number; // 1, 10, 100, 1000
   
   // Global Environment
   globalEnv: GlobalEnv;
@@ -101,6 +117,7 @@ export interface SimulationState {
   
   // Environment & Motion
   backgroundColor: string; // Hex
+  backgroundPattern: BackgroundPattern; // Texture
   objectSpeed: number; // mm/s
   vibrationLevel: number; // 0-10
   
