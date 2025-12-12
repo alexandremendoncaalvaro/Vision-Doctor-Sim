@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SimulationState, OpticalMetrics, LightType, LightColor, Language } from '../types';
+import { SimulationState, OpticalMetrics, LightFixture, LightPosition, LightColor, Language } from '../types';
 import { SENSOR_SPECS, OBJECT_DIMS } from '../constants';
 import { TEXTS } from '../translations';
 import { RectangleHorizontal, RectangleVertical } from 'lucide-react';
@@ -64,7 +64,10 @@ const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics, language 
   };
 
   const renderCameraAttachedLights = () => {
-     if (state.lightType === LightType.RingLight) {
+     // Only render if position is Camera
+     if (state.lightPosition !== LightPosition.Camera) return null;
+
+     if (state.lightType === LightFixture.Ring) {
         const ringX = lensLocalX + 10;
         const ringRadius = 40;
         return (
@@ -81,7 +84,7 @@ const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics, language 
           </g>
         );
      }
-     if (state.lightType === LightType.Coaxial) {
+     if (state.lightType === LightFixture.Coaxial) {
         const coaxX = lensLocalX - 25;
         const coaxY = -50;
         return (
@@ -98,7 +101,10 @@ const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics, language 
   };
 
   const renderFixedLights = () => {
-    if (state.lightType === LightType.BackLight) {
+    // Render lights that are NOT attached to camera (World fixed relative to object)
+    if (state.lightPosition === LightPosition.Camera) return null;
+
+    if (state.lightPosition === LightPosition.Back) {
         return (
           <g transform={`translate(${objectX}, ${centerlineY})`}>
             <rect x={20} y={-scale(150)} width={10} height={scale(300)} fill={lightColorHex} fillOpacity="0.8" stroke={lightColorHex}/>
@@ -108,7 +114,8 @@ const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics, language 
           </g>
         );
     }
-    if (state.lightType === LightType.LowAngle) {
+    
+    if (state.lightPosition === LightPosition.LowAngle) {
          const laRadius = 70;
          return (
           <g transform={`translate(${objectX}, ${centerlineY})`}>
@@ -122,6 +129,32 @@ const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics, language 
           </g>
         );
     }
+
+    if (state.lightPosition === LightPosition.Top) {
+        return (
+          <g transform={`translate(${objectX}, ${centerlineY})`}>
+             <rect x={-50} y={-150} width={100} height={10} fill="#334155" stroke={lightColorHex} />
+             <line x1={-40} y1={-140} x2={0} y2={-objectH/2} stroke={lightColorHex} strokeDasharray="4,4" />
+             <line x1={40} y1={-140} x2={0} y2={-objectH/2} stroke={lightColorHex} strokeDasharray="4,4" />
+             <Label x={0} y={-160} fill={lightColorHex} fontSize="12" textAnchor="middle">Top Light</Label>
+          </g>
+        );
+    }
+
+    // Side lights difficult to visualize in side profile if coming from Z axis, 
+    // but if coming from Y axis (up/down in image), they are just Top/Bottom?
+    // Let's assume Side is perpendicular to this view, maybe draw a circle with an X?
+    if (state.lightPosition === LightPosition.Side) {
+         return (
+          <g transform={`translate(${objectX}, ${centerlineY})`}>
+             <circle cx={0} cy={-objectH/2 - 50} r={10} fill="none" stroke={lightColorHex} />
+             <text x={0} y={-objectH/2 - 47} textAnchor="middle" fontSize="10" fill={lightColorHex}>Side</text>
+             {/* Abstract rays */}
+             <line x1={0} y1={-objectH/2 - 40} x2={0} y2={-objectH/2} stroke={lightColorHex} strokeDasharray="2,2"/>
+          </g>
+         );
+    }
+    
     return null;
   };
 

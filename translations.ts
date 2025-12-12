@@ -6,14 +6,12 @@ export const TEXTS = {
     appTitle: "Simulador Vision Doctor",
     appSubtitle: "Simulador Óptico Industrial",
     
-    // Control Panel Sections
     sectionObject: "Objeto e Objetivo",
     sectionView: "Vista e Orientação",
-    sectionCamera: "Câmera e Lente",
-    sectionLight: "Iluminação e Exposição",
-    sectionEnv: "Ambiente",
+    sectionCamera: "Câmera, Lente e Exposição",
+    sectionLight: "Iluminação",
+    sectionEnv: "Ambiente e Movimento",
 
-    // Labels
     targetObject: "Objeto Alvo",
     inspectionGoal: "Objetivo da Inspeção",
     cameraFocus: "Foco da Câmera",
@@ -24,8 +22,11 @@ export const TEXTS = {
     workingDistance: "Distância de Trabalho",
     tiltAngle: "Ângulo de Inclinação",
     lightType: "Tipo de Luz",
+    lightPos: "Posição",
+    lightConfig: "Configuração",
+    lightDist: "Distância da Luz (mm)",
     lightColor: "Cor da Luz",
-    lightIntensity: "Intensidade",
+    lightIntensity: "Intensidade da Luz",
     exposureTime: "Tempo de Exposição",
     sensorGain: "Ganho do Sensor",
     background: "Fundo",
@@ -33,13 +34,11 @@ export const TEXTS = {
     vibration: "Nível de Vibração",
     roiSize: "Tamanho da ROI",
     
-    // Actions
     analyzeBtn: "Consultar Doctor AI",
     analyzing: "Analisando...",
     autoTune: "Auto-Configurar",
     autoTuneDesc: "Aplicar configurações recomendadas para este objetivo",
 
-    // Dropdown Options
     objects: {
       "PCB Board": "Placa PCB",
       "Glass Bottle (Amber)": "Garrafa de Vidro (Âmbar)",
@@ -47,34 +46,47 @@ export const TEXTS = {
       "Matte Block": "Bloco Fosco",
       "Bottle Cap": "Tampa de Garrafa"
     },
-    
-    // View Focus
     focus: {
         Top: "Topo", Middle: "Meio", Bottom: "Fundo", Whole: "Inteiro"
     },
     orientation: {
         Front: "Frente", Side: "Lado", Back: "Trás", Top: "Topo", Bottom: "Baixo"
     },
-    
-    // Light Types
-    lights: {
-        "Ring Light": "Anel de Luz",
-        "Backlight": "Backlight",
-        "Coaxial": "Coaxial",
-        "Low Angle Ring": "Anel Baixo Ângulo"
+    fixtures: {
+        "Ring": "Anel (Ring)",
+        "Bar": "Barra (Bar)",
+        "Spot": "Spot",
+        "Panel": "Painel (Backlight)",
+        "Coaxial": "Coaxial"
+    },
+    positions: {
+        "Camera Axis": "Eixo da Câmera",
+        "Backlight": "Backlight (Atrás)",
+        "Top": "Topo",
+        "Side": "Lateral",
+        "Low Angle": "Ângulo Baixo",
+        "Multi-Angle": "Multi-Ângulo"
+    },
+    configs: {
+        "Small": "Pequeno",
+        "Medium": "Médio",
+        "Large": "Grande",
+        "Single": "Único",
+        "Dual (Opposite)": "Duplo (Oposto)",
+        "Quad (Square)": "Quadruplo (Quadrado)",
+        "Narrow": "Foco Estreito",
+        "Wide": "Foco Aberto"
     },
     colors: {
         "White": "Branco", "Red": "Vermelho", "Blue": "Azul", "Infrared": "Infravermelho", "UV": "UV"
     },
     
-    // App UI
     schematic: "Esquemático",
     simulator: "Simulador",
     cameraView: "Visão da Câmera",
     freeView: "Visão 3D Livre",
     toggleDoctor: "Alternar Doctor Advice",
     
-    // Report
     reportTitle: "Relatório Dr. Vision",
     reportScore: "Adequação",
     reportExcellent: "Excelente",
@@ -83,7 +95,6 @@ export const TEXTS = {
     noReport: "Clique em 'Consultar Doctor AI' para gerar um relatório.",
     scenarioCheck: "Verificação de Cenário",
     
-    // Schematic Labels
     schCamera: "Câmera",
     schLens: "Lente",
     schObject: "Objeto",
@@ -92,19 +103,16 @@ export const TEXTS = {
     schCoaxial: "Coaxial",
     schWd: "DT",
     
-    // Stats
     statFov: "FOV (H x V)",
     statMag: "Ampliação",
     statDof: "Profundidade de Campo",
     
-    // HUD
     hudSensor: "VISÃO DO SENSOR",
     hudWorld: "VISÃO DO MUNDO",
     hudExp: "EXP",
     hudGain: "GANHO",
     hudFps: "FPS",
     
-    // Validation
     valFraming: "Enquadramento (ROI)",
     valStability: "Estabilidade",
     valContrast: "Contraste",
@@ -120,9 +128,9 @@ export const TEXTS = {
     appSubtitle: "Industrial Optical Simulator",
     sectionObject: "Object & Goal",
     sectionView: "View & Orientation",
-    sectionCamera: "Camera & Lens",
-    sectionLight: "Light & Exposure",
-    sectionEnv: "Environment",
+    sectionCamera: "Camera, Lens & Exposure",
+    sectionLight: "Lighting",
+    sectionEnv: "Environment & Motion",
     targetObject: "Target Object",
     inspectionGoal: "Inspection Goal",
     cameraFocus: "Camera Focus",
@@ -132,9 +140,12 @@ export const TEXTS = {
     aperture: "Aperture (f-stop)",
     workingDistance: "Working Distance",
     tiltAngle: "Tilt Angle",
-    lightType: "Light Type",
+    lightType: "Light Fixture",
+    lightPos: "Position",
+    lightConfig: "Configuration",
+    lightDist: "Light Distance (mm)",
     lightColor: "Light Color",
-    lightIntensity: "Intensity",
+    lightIntensity: "Light Intensity",
     exposureTime: "Exposure Time",
     sensorGain: "Sensor Gain",
     background: "Background",
@@ -158,11 +169,30 @@ export const TEXTS = {
     orientation: {
         Front: "Front", Side: "Side", Back: "Back", Top: "Top", Bottom: "Bottom"
     },
-    lights: {
-        "Ring Light": "Ring Light",
-        "Backlight": "Backlight",
-        "Coaxial": "Coaxial",
-        "Low Angle Ring": "Low Angle Ring"
+    fixtures: {
+        "Ring": "Ring Light",
+        "Bar": "Bar Light",
+        "Spot": "Spot Light",
+        "Panel": "Panel (Backlight)",
+        "Coaxial": "Coaxial"
+    },
+    positions: {
+        "Camera Axis": "Camera Axis",
+        "Backlight": "Backlight (Behind)",
+        "Top": "Top",
+        "Side": "Side",
+        "Low Angle": "Low Angle",
+        "Multi-Angle": "Multi-Angle"
+    },
+    configs: {
+        "Small": "Small",
+        "Medium": "Medium",
+        "Large": "Large",
+        "Single": "Single",
+        "Dual (Opposite)": "Dual (Opposite)",
+        "Quad (Square)": "Quad (Square)",
+        "Narrow": "Narrow Beam",
+        "Wide": "Wide Beam"
     },
     colors: {
         "White": "White", "Red": "Red", "Blue": "Blue", "Infrared": "Infrared", "UV": "UV"
@@ -209,9 +239,9 @@ export const TEXTS = {
     appSubtitle: "Simulador Óptico Industrial",
     sectionObject: "Objeto y Objetivo",
     sectionView: "Vista y Orientación",
-    sectionCamera: "Cámara y Lente",
-    sectionLight: "Iluminación y Exposición",
-    sectionEnv: "Ambiente",
+    sectionCamera: "Cámara, Lente y Exposición",
+    sectionLight: "Iluminación",
+    sectionEnv: "Ambiente y Movimiento",
     targetObject: "Objeto Objetivo",
     inspectionGoal: "Objetivo de Inspección",
     cameraFocus: "Enfoque de Cámara",
@@ -221,9 +251,12 @@ export const TEXTS = {
     aperture: "Apertura (f-stop)",
     workingDistance: "Distancia de Trabajo",
     tiltAngle: "Ángulo de Inclinación",
-    lightType: "Tipo de Luz",
+    lightType: "Luminaria",
+    lightPos: "Posición",
+    lightConfig: "Configuración",
+    lightDist: "Distancia de Luz (mm)",
     lightColor: "Color de Luz",
-    lightIntensity: "Intensidad",
+    lightIntensity: "Intensidad de Luz",
     exposureTime: "Tiempo de Exposición",
     sensorGain: "Ganancia del Sensor",
     background: "Fondo",
@@ -247,11 +280,30 @@ export const TEXTS = {
     orientation: {
         Front: "Frente", Side: "Lado", Back: "Atrás", Top: "Superior", Bottom: "Inferior"
     },
-    lights: {
-        "Ring Light": "Anillo de Luz",
-        "Backlight": "Luz Trasera",
-        "Coaxial": "Coaxial",
-        "Low Angle Ring": "Anillo de Bajo Ángulo"
+    fixtures: {
+        "Ring": "Anillo (Ring)",
+        "Bar": "Barra (Bar)",
+        "Spot": "Spot",
+        "Panel": "Panel (Luz Trasera)",
+        "Coaxial": "Coaxial"
+    },
+    positions: {
+        "Camera Axis": "Eje de Cámara",
+        "Backlight": "Luz Trasera (Atrás)",
+        "Top": "Superior",
+        "Side": "Lateral",
+        "Low Angle": "Ángulo Bajo",
+        "Multi-Angle": "Multi-Ángulo"
+    },
+    configs: {
+        "Small": "Pequeño",
+        "Medium": "Medio",
+        "Large": "Grande",
+        "Single": "Único",
+        "Dual (Opposite)": "Doble (Opuesto)",
+        "Quad (Square)": "Cuádruple (Cuadrado)",
+        "Narrow": "Haz Estrecho",
+        "Wide": "Haz Ancho"
     },
     colors: {
         "White": "Blanco", "Red": "Rojo", "Blue": "Azul", "Infrared": "Infrarrojo", "UV": "UV"
@@ -295,8 +347,8 @@ export const TEXTS = {
   }
 };
 
-// Map internal English goal strings to translations
 export const GOAL_TRANSLATIONS: Record<string, Record<Language, string>> = {
+  // ... (Goal translations remain unchanged) ...
   // PCB
   "Check Solder Bridges (Shorts)": { 
       "en": "Check Solder Bridges (Shorts)", 

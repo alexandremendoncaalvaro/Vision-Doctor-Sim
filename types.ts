@@ -18,11 +18,36 @@ export enum LightColor {
   UV = "UV"
 }
 
-export enum LightType {
-  RingLight = "Ring Light",
-  BackLight = "Backlight",
-  Coaxial = "Coaxial",
-  LowAngle = "Low Angle Ring"
+export enum LightFixture {
+  Ring = "Ring",
+  Bar = "Bar",
+  Spot = "Spot",
+  Panel = "Panel",
+  Coaxial = "Coaxial"
+}
+
+// Simplified positions that make sense per fixture
+export enum LightPosition {
+  Camera = "Camera Axis",
+  Back = "Backlight", // Behind object
+  Top = "Top",        // Above object
+  Side = "Side",      // From one side
+  LowAngle = "Low Angle", // Grazing
+  Multi = "Multi-Angle" // For 4-bar setups
+}
+
+export enum LightConfig {
+  // Sizes
+  Small = "Small",
+  Medium = "Medium",
+  Large = "Large",
+  // Arrangements
+  Single = "Single",
+  Dual = "Dual (Opposite)",
+  Quad = "Quad (Square)",
+  // Beams
+  Narrow = "Narrow",
+  Wide = "Wide"
 }
 
 export enum ObjectType {
@@ -50,7 +75,11 @@ export interface SimulationState {
   viewFocus: ViewFocus;
   objectOrientation: ObjectOrientation;
 
-  lightType: LightType;
+  // Lighting
+  lightType: LightFixture; 
+  lightPosition: LightPosition; 
+  lightConfig: LightConfig; // Size/Arrangement
+  lightDistance: number; // mm (Distance from object center)
   lightColor: LightColor;
   lightIntensity: number; // 0-100
   

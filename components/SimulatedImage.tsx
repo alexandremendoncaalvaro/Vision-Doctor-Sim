@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { SimulationState, OpticalMetrics, LightColor, LightType, ObjectType, Language } from '../types';
+import { SimulationState, OpticalMetrics, LightColor, LightFixture, LightPosition, LightConfig, ObjectType, Language } from '../types';
 import { OBJECT_DIMS } from '../constants';
 import { TEXTS } from '../translations';
 
@@ -69,7 +69,8 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
+    
     // High Dynamic Range
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.domElement.style.outline = 'none';
@@ -77,7 +78,7 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // --- ENVIRONMENT MAP (CRITICAL FOR GLASS/METAL) ---
+    // --- ENVIRONMENT MAP ---
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     pmremGenerator.compileEquirectangularShader();
     const envTexture = pmremGenerator.fromScene(new RoomEnvironment()).texture;
@@ -173,15 +174,12 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
 
   // --- UPDATES ---
 
-  // 1. Background Update
   useEffect(() => {
     if (sceneRef.current) {
-       // We keep the environment for reflections, but change the visible background
        sceneRef.current.background = new THREE.Color(state.backgroundColor);
     }
   }, [state.backgroundColor]);
 
-  // 2. Exposure Physics Update
   useEffect(() => {
     if (rendererRef.current) {
        const baseExposure = 1.0;
@@ -194,25 +192,19 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     }
   }, [state.exposureTime, state.aperture, state.gain]);
 
-  // 3. Scene Objects & Lights & Camera Pose Update
   useEffect(() => {
     if (!sceneRef.current || !lightsGroupRef.current || !objectGroupRef.current || !camModelRef.current || !cameraRef.current) return;
 
     const objectHeight = OBJECT_DIMS[state.objectType].h;
     
-    // Calculate Target Y based on Focus
+    // Target Y logic
     let targetY = 0;
-    if (state.viewFocus === 'Top') targetY = objectHeight * 0.45; // slightly below absolute top
+    if (state.viewFocus === 'Top') targetY = objectHeight * 0.45;
     else if (state.viewFocus === 'Bottom') targetY = -objectHeight * 0.45;
     else if (state.viewFocus === 'Middle') targetY = 0;
     else if (state.viewFocus === 'Whole') targetY = 0;
 
     const angleRad = (state.cameraAngle * Math.PI) / 180;
-    
-    // Camera is positioned relative to the Target
-    // If we look at the top, the camera moves up.
-    // CamY = TargetY + WD * sin(angle)
-    // CamZ = TargetZ + WD * cos(angle)
     
     const camY = targetY + (state.workingDistance * Math.sin(angleRad));
     const camZ = state.workingDistance * Math.cos(angleRad);
@@ -224,21 +216,16 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     cameraRef.current.fov = fovDeg;
     cameraRef.current.updateProjectionMatrix();
 
-    // Move Camera Model visual to match
     camModelRef.current.position.set(0, camY, camZ);
     camModelRef.current.lookAt(0, targetY, 0);
     camModelRef.current.visible = viewType === 'free'; 
 
     updateObject(objectGroupRef.current, state.objectType, state.objectOrientation);
     
-    // Lights typically move with the camera (Ring/Coax) or stay fixed relative to world center (Backlight)
-    // We pass camY/camZ which are the camera coordinates.
-    // However, if we move the camera up to inspect the Top, the Ring Light should follow.
     updateLights(lightsGroupRef.current, state, camY, camZ, targetY);
 
   }, [state, metrics, viewType]);
 
-  // --- BLUR CALCULATION ---
   const blurStyle = useMemo(() => {
     if (viewType === 'free') return {};
     const totalBlurPx = metrics.motionBlurPx;
@@ -248,7 +235,6 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
 
   const noiseOpacity = Math.min(Math.max(state.gain / 40, 0), 0.6);
 
-  // --- ROI STYLE ---
   const roiStyle: React.CSSProperties = {
     left: `${(state.roiX - state.roiW/2) * 100}%`,
     top: `${(state.roiY - state.roiH/2) * 100}%`,
@@ -346,7 +332,7 @@ function createEtchedTexture(): THREE.Texture {
   canvas.height = 256;
   const ctx = canvas.getContext('2d');
   if (ctx) {
-      ctx.fillStyle = '#111111'; // Match chip color
+      ctx.fillStyle = '#111111'; 
       ctx.fillRect(0, 0, 256, 256);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -374,13 +360,13 @@ function createBeerLabelTexture(name: string, subtext: string, hue: number): THR
         const grad = ctx.createLinearGradient(0, 0, 1024, 0);
         grad.addColorStop(0, `hsl(${hue}, 80%, 20%)`);
         grad.addColorStop(0.3, `hsl(${hue}, 70%, 30%)`);
-        grad.addColorStop(0.5, `hsl(${hue}, 60%, 45%)`); // Highlight
+        grad.addColorStop(0.5, `hsl(${hue}, 60%, 45%)`);
         grad.addColorStop(0.7, `hsl(${hue}, 70%, 30%)`);
         grad.addColorStop(1, `hsl(${hue}, 80%, 20%)`);
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, 1024, 512);
         
-        ctx.strokeStyle = '#d4af37'; // Gold
+        ctx.strokeStyle = '#d4af37'; 
         ctx.lineWidth = 15;
         ctx.strokeRect(20, 20, 984, 472);
 
@@ -421,7 +407,6 @@ function createCrownCapTexture(color: string): THREE.Texture {
         ctx.fillStyle = color; 
         ctx.fillRect(0,0,512,512);
 
-        // Scratches / imperfection
         for(let i=0; i<100; i++) {
            ctx.fillStyle = 'rgba(255,255,255,0.05)';
            const x = Math.random() * 512;
@@ -448,8 +433,43 @@ function createCrownCapTexture(color: string): THREE.Texture {
     return tex;
 }
 
+function createRealisticCrownCap(radius: number): THREE.Group {
+  const group = new THREE.Group();
+  const topHeight = radius * 0.15;
+  
+  // Top
+  const topGeo = new THREE.CylinderGeometry(radius, radius, topHeight, 32);
+  const topMat = new THREE.MeshStandardMaterial({ 
+      map: createCrownCapTexture('#dc2626'),
+      color: 0xffffff,
+      roughness: 0.3,
+      metalness: 0.1
+  });
+  const top = new THREE.Mesh(topGeo, topMat);
+  top.position.y = topHeight/2;
+  top.receiveShadow = true;
+  top.castShadow = true;
+  group.add(top);
+
+  // Skirt (simplified crimps)
+  const skirtHeight = radius * 0.3;
+  const skirtGeo = new THREE.CylinderGeometry(radius, radius * 1.05, skirtHeight, 21, 1, true);
+  const skirtMat = new THREE.MeshStandardMaterial({ 
+      color: 0xdca5a5, // slightly reddish metal
+      roughness: 0.4, 
+      metalness: 0.7,
+      side: THREE.DoubleSide
+  });
+  const skirt = new THREE.Mesh(skirtGeo, skirtMat);
+  skirt.position.y = -skirtHeight/2;
+  skirt.receiveShadow = true;
+  skirt.castShadow = true;
+  group.add(skirt);
+  
+  return group;
+}
+
 function updateObject(group: THREE.Group, type: ObjectType, orientation: string) {
-  // Clear previous
   while(group.children.length > 0){ 
     const child = group.children[0];
     group.remove(child);
@@ -460,22 +480,26 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
     }
   }
 
-  // Set Rotation based on Orientation Presets
-  // Default (Front) is 0,0,0
   group.rotation.set(0,0,0);
-  
   if (orientation === 'Side') group.rotation.y = -Math.PI / 2;
   else if (orientation === 'Back') group.rotation.y = Math.PI;
-  else if (orientation === 'Top') group.rotation.x = Math.PI / 2; // Lie down
+  else if (orientation === 'Top') group.rotation.x = Math.PI / 2; 
   else if (orientation === 'Bottom') group.rotation.x = -Math.PI / 2;
+
+  const setShadows = (mesh: THREE.Object3D) => {
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+  };
 
   const dim = OBJECT_DIMS[type];
 
   if (type === ObjectType.PCB) {
      const board = new THREE.Mesh(new THREE.BoxGeometry(dim.w, dim.h, dim.depth), new THREE.MeshStandardMaterial({ color: 0x1a472a, roughness: 0.5 }));
+     setShadows(board);
      group.add(board);
      const chip = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 3), new THREE.MeshStandardMaterial({ color: 0x111111 }));
      chip.position.z = dim.depth/2 + 1.5;
+     setShadows(chip);
      group.add(chip);
      
      const labelGeo = new THREE.PlaneGeometry(16, 16);
@@ -488,12 +512,14 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
      });
      const label = new THREE.Mesh(labelGeo, labelMat);
      label.position.set(0, 0, dim.depth/2 + 3.01);
+     label.receiveShadow = true; 
      group.add(label);
 
      const padMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 1.0, roughness: 0.1 });
      for(let i=0; i<5; i++) {
          const pad = new THREE.Mesh(new THREE.BoxGeometry(6, 4, 0.5), padMat);
          pad.position.set(-30, (i-2)*10, dim.depth/2 + 0.25);
+         setShadows(pad);
          group.add(pad);
      }
   } 
@@ -527,6 +553,7 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
           side: THREE.DoubleSide
       });
       const bottle = new THREE.Mesh(glassGeo, glassMat);
+      setShadows(bottle);
       
       const liqPoints = points.slice(0, 5).map(p => new THREE.Vector2(p.x * 0.88, p.y < h*0.7 ? p.y + 2 : h*0.7));
       const liqGeo = new THREE.LatheGeometry(liqPoints, 32);
@@ -535,6 +562,7 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
           roughness: 0.3 
       });
       const liquid = new THREE.Mesh(liqGeo, liqMat);
+      setShadows(liquid);
 
       const labelGeo = new THREE.CylinderGeometry(r + 0.1, r + 0.1, h * 0.3, 64, 1, true);
       const labelMat = new THREE.MeshStandardMaterial({ 
@@ -546,9 +574,11 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
       const label = new THREE.Mesh(labelGeo, labelMat);
       label.position.y = h * 0.35;
       label.rotation.y = -Math.PI / 2;
+      label.receiveShadow = true;
 
       const capGroup = createRealisticCrownCap(r * 0.35);
       capGroup.position.y = h;
+      capGroup.traverse((obj) => { if(obj instanceof THREE.Mesh) setShadows(obj); });
       
       const bottleGroup = new THREE.Group();
       bottleGroup.add(bottle);
@@ -581,30 +611,36 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
       const bodyGeo = new THREE.CylinderGeometry(r, r, bodyH, 64);
       const body = new THREE.Mesh(bodyGeo, aluMat);
       body.rotation.y = -Math.PI/2;
+      setShadows(body);
       
       const taperH = h * 0.08;
       const bottomGeo = new THREE.CylinderGeometry(r, r * 0.7, taperH, 64);
       const bottom = new THREE.Mesh(bottomGeo, topMat);
       bottom.position.y = -bodyH/2 - taperH/2;
+      setShadows(bottom);
       
       const topGeo = new THREE.CylinderGeometry(r * 0.8, r, taperH, 64);
       const top = new THREE.Mesh(topGeo, topMat);
       top.position.y = bodyH/2 + taperH/2;
+      setShadows(top);
 
       const rimGeo = new THREE.TorusGeometry(r * 0.8, 1.2, 16, 100);
       const rim = new THREE.Mesh(rimGeo, topMat);
       rim.rotation.x = Math.PI/2;
       rim.position.y = bodyH/2 + taperH;
+      setShadows(rim);
 
       const lidGeo = new THREE.CircleGeometry(r*0.78, 64);
       const lid = new THREE.Mesh(lidGeo, topMat);
       lid.rotation.x = -Math.PI/2;
       lid.position.y = bodyH/2 + taperH - 0.5;
+      lid.receiveShadow = true;
 
       const tabGeo = new THREE.BoxGeometry(10, 1, 15);
       const tab = new THREE.Mesh(tabGeo, topMat);
       tab.position.y = bodyH/2 + taperH + 1;
       tab.position.z = 5;
+      setShadows(tab);
 
       const canGroup = new THREE.Group();
       canGroup.add(body);
@@ -621,129 +657,235 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
           new THREE.BoxGeometry(dim.w, dim.h, dim.depth),
           new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.9, metalness: 0.0 })
       );
+      setShadows(block);
       group.add(block);
   }
   else if (type === ObjectType.BottleCap) {
       const cap = createRealisticCrownCap(dim.w / 2);
       cap.rotation.x = -Math.PI/2; 
+      cap.traverse((obj) => { if(obj instanceof THREE.Mesh) setShadows(obj); });
       group.add(cap);
   }
 }
 
-function createRealisticCrownCap(radius: number): THREE.Group {
-  const numTeeth = 21;
-  const segments = numTeeth * 2; 
-  const height = 6;
-  
-  const group = new THREE.Group();
-
-  const topGeo = new THREE.CylinderGeometry(radius, radius, 0.5, segments);
-  const topMat = new THREE.MeshStandardMaterial({ 
-      map: createCrownCapTexture('#b91c1c'),
-      roughness: 0.3,
-      metalness: 0.5,
-      bumpMap: createCrownCapTexture('#000000'), 
-      bumpScale: 0.1
-  });
-  const top = new THREE.Mesh(topGeo, topMat);
-  top.position.y = height / 2;
-  group.add(top);
-
-  const skirtGeo = new THREE.CylinderGeometry(radius, radius * 1.05, height, segments, 4, true);
-  const posAttribute = skirtGeo.attributes.position;
-  const vertex = new THREE.Vector3();
-
-  for (let i = 0; i < posAttribute.count; i++) {
-    vertex.fromBufferAttribute(posAttribute, i);
-    const angle = Math.atan2(vertex.z, vertex.x);
-    const yFactor = (height/2 - vertex.y) / height; 
-    const wave = Math.cos(angle * numTeeth);
-    const flare = 1.0 + (wave * 0.1 * yFactor); 
-    vertex.x *= flare;
-    vertex.z *= flare;
-    posAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
-  }
-  
-  skirtGeo.computeVertexNormals();
-
-  const skirtMat = new THREE.MeshStandardMaterial({ 
-      color: 0xb91c1c, 
-      roughness: 0.3, 
-      metalness: 0.6,
-      side: THREE.DoubleSide
-  });
-  const skirt = new THREE.Mesh(skirtGeo, skirtMat);
-  group.add(skirt);
-
-  return group;
-}
-
 function updateLights(group: THREE.Group, state: SimulationState, camY: number, camZ: number, targetY: number) {
   while(group.children.length > 0){ group.remove(group.children[0]); }
+  
   const intensityPercent = state.lightIntensity;
   const baseIntensity = intensityPercent / 100;
   const colorHex = getLightColorHex(state.lightColor);
   const visualColor = new THREE.Color(colorHex).multiplyScalar(0.5 + baseIntensity); 
-  const ambient = new THREE.AmbientLight(colorHex, 0.05 + (baseIntensity * 0.05));
+  
+  const ambient = new THREE.AmbientLight(colorHex, 0.02 + (baseIntensity * 0.05));
   group.add(ambient);
 
-  // Note: camY includes the target offset.
-  // We want to position lights relative to the camera or target.
+  // Position Logic
+  let lightPos = new THREE.Vector3();
+  let lightTarget = new THREE.Vector3(0, targetY, 0);
 
-  if (state.lightType === LightType.BackLight) {
-     const plane = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshBasicMaterial({ color: visualColor }));
-     plane.position.z = -100; plane.lookAt(0,0,0); group.add(plane);
-     const backLight = new THREE.DirectionalLight(colorHex, baseIntensity * 8);
-     backLight.position.set(0, 0, -200); group.add(backLight); group.add(backLight.target);
-  } else if (state.lightType === LightType.RingLight) {
-     const light = new THREE.SpotLight(colorHex, baseIntensity * 120);
-     light.position.set(0, camY, camZ); 
-     light.target.position.set(0, targetY, 0); // Point at focus
-     light.distance = 5000; light.angle = 0.65; light.penumbra = 0.3; light.decay = 0;
-     group.add(light); group.add(light.target);
-     const ring = new THREE.Mesh(new THREE.TorusGeometry(22, 3, 16, 32), new THREE.MeshBasicMaterial({ color: visualColor }));
-     ring.position.set(0, camY, camZ); 
-     ring.lookAt(0, targetY, 0); // Orient towards focus
-     group.add(ring);
-  } else if (state.lightType === LightType.Coaxial) {
-     const light = new THREE.SpotLight(colorHex, baseIntensity * 250); 
-     light.position.set(0, camY, camZ); light.angle = 0.35; light.penumbra = 0.1; light.decay = 0;
-     light.target.position.set(0, targetY, 0);
-     group.add(light); group.add(light.target);
-     const box = new THREE.Mesh(new THREE.BoxGeometry(15, 15, 30), new THREE.MeshBasicMaterial({ color: visualColor }));
-     const offset = new THREE.Vector3(25, 0, 0); 
-     // We need to rotate offset to match camera tilt
-     offset.applyAxisAngle(new THREE.Vector3(1,0,0), (state.cameraAngle * Math.PI)/180);
-     box.position.set(0, camY, camZ).add(offset); 
-     box.lookAt(box.position.clone().add(new THREE.Vector3(0,0,-1))); // Just a visual box
-     group.add(box);
-  } else if (state.lightType === LightType.LowAngle) {
-     // Low Angle light is usually fixed to the fixture base, not moving with camera?
-     // Actually if we are inspecting Top of bottle, we might have a high ring light.
-     // But "Low Angle Ring" specifically usually means sitting on the conveyor.
-     // So we keep it fixed at Z=5 (near object surface)
-     for(let i=0; i<8; i++) {
-        const ang = (i / 8) * Math.PI * 2;
-        const spot = new THREE.SpotLight(colorHex, baseIntensity * 80);
-        spot.position.set(Math.cos(ang) * 90, Math.sin(ang) * 90, 5); // Z=5 is slightly above Z=0 plane? No, Z is depth here.
-        // Coordinate system: Y is up/down tower. Z is distance to camera.
-        // Actually in this scene setup:
-        // Bottle is vertical along Y. Camera is at +Z.
-        // So Low Angle Ring should be in XZ plane around the bottle?
-        // Wait, current bottle is -h/2 to h/2 Y.
-        // Low angle ring should be at Y = -h/2 (bottom of bottle) or Y = targetY?
-        // Typically Low Angle is for surface inspection. Let's make it follow the TargetY to simulate a ring light mounted close to the inspection point.
-        
-        spot.position.set(Math.cos(ang) * 90, targetY, Math.sin(ang) * 90);
-        spot.target.position.set(0, targetY, 0);
-        
-        spot.angle = 0.6; spot.penumbra = 0.4; spot.decay = 0; 
-        group.add(spot); group.add(spot.target);
+  // Distance Control
+  // "Distance" usually means from object center to light source.
+  const dist = state.lightDistance || 200;
+
+  // Default positions relative to object center (0,targetY,0)
+  switch (state.lightPosition) {
+    case LightPosition.Camera:
+      lightPos.set(0, camY, camZ);
+      break;
+    case LightPosition.Back:
+      // STRICTLY BEHIND (-Z). 
+      lightPos.set(0, targetY, -dist);
+      break;
+    case LightPosition.Top:
+      lightPos.set(0, targetY + dist, 0);
+      break;
+    case LightPosition.Side:
+      // From side (X axis)
+      lightPos.set(dist, targetY + 20, 0);
+      break;
+    case LightPosition.LowAngle:
+      lightPos.set(0, targetY, 0); 
+      break;
+    default:
+      lightPos.set(0, 0, dist);
+  }
+
+  // Create a container for the fixture that is oriented towards the target
+  const fixtureGroup = new THREE.Group();
+  fixtureGroup.position.copy(lightPos);
+  
+  // Look at target.
+  fixtureGroup.lookAt(lightTarget);
+  group.add(fixtureGroup);
+
+  const configShadow = (light: THREE.Light) => {
+    light.castShadow = true;
+    light.shadow.mapSize.width = 1024;
+    light.shadow.mapSize.height = 1024;
+    light.shadow.bias = -0.0005;
+  };
+
+  const fixture = state.lightType;
+  const config = state.lightConfig;
+
+  // Helper to add a spot in Local Space
+  const addSpot = (x:number, y:number, z:number, angle:number, intensityMult: number = 1.0) => {
+     const s = new THREE.SpotLight(colorHex, baseIntensity * 100 * intensityMult);
+     s.position.set(x, y, z);
+     // Target relative to light, shining down -Z in local space
+     const targetObj = new THREE.Object3D();
+     targetObj.position.set(x, y, z - 100);
+     fixtureGroup.add(targetObj);
+     s.target = targetObj;
+     
+     s.angle = angle;
+     s.penumbra = 0.5;
+     s.decay = 0;
+     s.distance = 2000;
+     configShadow(s);
+     fixtureGroup.add(s);
+  };
+
+  if (fixture === LightFixture.Ring) {
+     if (state.lightPosition === LightPosition.LowAngle) {
+         // Dark Field Ring (Grazing) - Overrides fixtureGroup
+         fixtureGroup.removeFromParent(); 
+         const laGroup = new THREE.Group();
+         laGroup.position.set(0, targetY, 0); 
+         group.add(laGroup);
+         
+         // Use LightDistance as Diameter/Radius for Low Angle?
+         // No, LightDistance usually means elevation or standoff.
+         // Let's use fixed radius for now, elevation very low.
+         const r = 90; 
+         
+         for(let i=0; i<8; i++) {
+            const a = (i/8)*Math.PI*2;
+            const elevation = 10; 
+            const s = new THREE.SpotLight(colorHex, baseIntensity * 200); 
+            s.position.set(Math.cos(a)*r, elevation, Math.sin(a)*r);
+            s.target.position.set(0, 0, 0);
+            s.angle = 0.6; s.penumbra = 0.5; s.decay = 0; s.distance = 300;
+            configShadow(s);
+            laGroup.add(s); laGroup.add(s.target);
+         }
+         const ringVis = new THREE.Mesh(new THREE.TorusGeometry(90, 2, 8, 32), new THREE.MeshBasicMaterial({ color: visualColor }));
+         ringVis.rotation.x = Math.PI/2;
+         ringVis.position.y = 10;
+         laGroup.add(ringVis);
+
+     } else {
+         // Standard Ring
+         const r = 45; 
+         for(let i=0; i<6; i++) {
+             const a = (i/6)*Math.PI*2;
+             addSpot(Math.cos(a)*r, Math.sin(a)*r, 0, 0.6, 25); 
+         }
+         const ringVis = new THREE.Mesh(new THREE.TorusGeometry(r, 4, 8, 32), new THREE.MeshBasicMaterial({ color: visualColor }));
+         fixtureGroup.add(ringVis);
      }
-     const ring = new THREE.Mesh(new THREE.TorusGeometry(90, 2, 8, 64), new THREE.MeshBasicMaterial({ color: visualColor }));
-     ring.position.set(0, targetY, 0); 
-     ring.rotation.x = Math.PI / 2; // Lie flat in XZ plane
-     group.add(ring);
+  } 
+  else if (fixture === LightFixture.Panel) {
+      // Config: Small, Medium, Large
+      let size = 200;
+      if (config === LightConfig.Small) size = 100;
+      if (config === LightConfig.Large) size = 400;
+
+      if (state.lightPosition === LightPosition.Back) {
+          // Backlight Silhouette
+          fixtureGroup.removeFromParent();
+          const dl = new THREE.DirectionalLight(colorHex, baseIntensity * 2);
+          // Position explicitly at -dist
+          dl.position.set(0, targetY, -dist);
+          dl.target.position.set(0, targetY, 0);
+          configShadow(dl);
+          
+          // Shadow bounds match size
+          const d = size / 2;
+          dl.shadow.camera.left = -d; dl.shadow.camera.right = d;
+          dl.shadow.camera.top = d; dl.shadow.camera.bottom = -d;
+          group.add(dl); group.add(dl.target);
+          
+          const plane = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ color: visualColor }));
+          plane.position.set(0, targetY, -dist);
+          plane.lookAt(0, targetY, 0);
+          group.add(plane);
+      } else {
+          // Diffuse Front/Side
+          const d = size / 4;
+          // 4 spots to simulate area
+          addSpot(-d, -d, 0, 0.9, 10);
+          addSpot(d, -d, 0, 0.9, 10);
+          addSpot(-d, d, 0, 0.9, 10);
+          addSpot(d, d, 0, 0.9, 10);
+          
+          const plane = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ color: visualColor }));
+          fixtureGroup.add(plane);
+      }
+  }
+  else if (fixture === LightFixture.Bar) {
+      const len = 100;
+      
+      const createBar = (x: number, y: number, rotZ: number = 0) => {
+          const barGroup = new THREE.Group();
+          barGroup.position.set(x, y, 0);
+          barGroup.rotation.z = rotZ;
+          fixtureGroup.add(barGroup);
+
+          // Add spots to barGroup
+          const s1 = new THREE.SpotLight(colorHex, baseIntensity * 40);
+          s1.position.set(-len/3, 0, 0);
+          const t1 = new THREE.Object3D(); t1.position.set(-len/3, 0, -100);
+          barGroup.add(t1); s1.target = t1; s1.angle=0.6; configShadow(s1); barGroup.add(s1);
+
+          const s2 = new THREE.SpotLight(colorHex, baseIntensity * 40);
+          s2.position.set(0, 0, 0);
+          const t2 = new THREE.Object3D(); t2.position.set(0, 0, -100);
+          barGroup.add(t2); s2.target = t2; s2.angle=0.6; configShadow(s2); barGroup.add(s2);
+
+          const s3 = new THREE.SpotLight(colorHex, baseIntensity * 40);
+          s3.position.set(len/3, 0, 0);
+          const t3 = new THREE.Object3D(); t3.position.set(len/3, 0, -100);
+          barGroup.add(t3); s3.target = t3; s3.angle=0.6; configShadow(s3); barGroup.add(s3);
+
+          const vis = new THREE.Mesh(new THREE.BoxGeometry(len, 20, 10), new THREE.MeshBasicMaterial({ color: visualColor }));
+          barGroup.add(vis);
+      }
+
+      createBar(0, 0, 0); // Always one center
+
+      if (config === LightConfig.Dual) {
+           // Move first one up, create second one down? Or Left/Right?
+           // If "Side" pos, Dual usually means Above/Below axis or Left/Right.
+           // Let's assume Side pos = Horizontal approach.
+           // Dual = One Left, One Right (relative to fixture axis)
+           fixtureGroup.clear(); // Clear the single one we made
+           createBar(-60, 0, 0);
+           createBar(60, 0, 0);
+      }
+      else if (config === LightConfig.Quad) {
+          fixtureGroup.clear();
+          const offset = 70;
+          createBar(0, offset, 0);
+          createBar(0, -offset, 0);
+          createBar(-offset, 0, Math.PI/2);
+          createBar(offset, 0, Math.PI/2);
+      }
+  }
+  else if (fixture === LightFixture.Spot) {
+      const angle = config === LightConfig.Narrow ? 0.2 : 0.6;
+      addSpot(0, 0, 0, angle, 200); 
+      const spotVis = new THREE.Mesh(new THREE.CylinderGeometry(5, 10, 15), new THREE.MeshBasicMaterial({ color: visualColor }));
+      spotVis.rotation.x = Math.PI/2;
+      fixtureGroup.add(spotVis);
+  }
+  else if (fixture === LightFixture.Coaxial) {
+      addSpot(0, 0, 0, 0.25, 250);
+      const box = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 40), new THREE.MeshBasicMaterial({ color: visualColor }));
+      if (state.lightPosition === LightPosition.Camera) {
+          box.position.x = 30;
+      }
+      fixtureGroup.add(box);
   }
 }
 

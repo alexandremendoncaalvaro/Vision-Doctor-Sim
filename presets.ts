@@ -1,4 +1,4 @@
-import { SimulationState, ObjectType, LightType, LightColor, SensorFormat } from './types';
+import { SimulationState, ObjectType, LightFixture, LightPosition, LightColor } from './types';
 
 // Helper to define partial state easily
 type Preset = Partial<SimulationState>;
@@ -6,9 +6,9 @@ type Preset = Partial<SimulationState>;
 // Keys are constructed as `${ObjectType}:${GoalString}`
 export const RECOMMENDED_PRESETS: Record<string, Preset> = {
   // --- PCB ---
-  // PCB is modeled standing up. 'Front' faces the camera.
   [`${ObjectType.PCB}:Check Solder Bridges (Shorts)`]: {
-    lightType: LightType.Coaxial,
+    lightType: LightFixture.Coaxial,
+    lightPosition: LightPosition.Camera,
     lightColor: LightColor.White,
     viewFocus: 'Whole',
     objectOrientation: 'Front', 
@@ -20,7 +20,8 @@ export const RECOMMENDED_PRESETS: Record<string, Preset> = {
     exposureTime: 5000
   },
   [`${ObjectType.PCB}:Verify Component Presence`]: {
-    lightType: LightType.RingLight,
+    lightType: LightFixture.Ring,
+    lightPosition: LightPosition.Camera,
     lightColor: LightColor.White,
     viewFocus: 'Whole',
     objectOrientation: 'Front',
@@ -30,7 +31,8 @@ export const RECOMMENDED_PRESETS: Record<string, Preset> = {
     cameraAngle: 0
   },
   [`${ObjectType.PCB}:Read Laser Etched Text (OCR)`]: {
-    lightType: LightType.LowAngle,
+    lightType: LightFixture.Bar, // Or Low Angle Ring
+    lightPosition: LightPosition.LowAngle,
     lightColor: LightColor.Red,
     viewFocus: 'Middle',
     objectOrientation: 'Front',
@@ -41,7 +43,8 @@ export const RECOMMENDED_PRESETS: Record<string, Preset> = {
     lightIntensity: 90
   },
   [`${ObjectType.PCB}:Check Polarity Marks`]: {
-    lightType: LightType.RingLight,
+    lightType: LightFixture.Ring,
+    lightPosition: LightPosition.Camera,
     lightColor: LightColor.White,
     viewFocus: 'Middle',
     objectOrientation: 'Front',
@@ -52,27 +55,30 @@ export const RECOMMENDED_PRESETS: Record<string, Preset> = {
 
   // --- GLASS BOTTLE ---
   [`${ObjectType.GlassBottle}:Inspect Fill Level`]: {
-    lightType: LightType.BackLight,
-    lightColor: LightColor.Red, // Red penetrates amber glass better
-    viewFocus: 'Middle', // Neck area
+    lightType: LightFixture.Panel,
+    lightPosition: LightPosition.Back,
+    lightColor: LightColor.Red,
+    viewFocus: 'Middle',
     objectOrientation: 'Front',
     workingDistance: 500,
     focalLength: 35,
-    aperture: 8, // More DOF
+    aperture: 8,
     cameraAngle: 0,
-    exposureTime: 2000 // Silhouettes are bright
+    exposureTime: 2000
   },
   [`${ObjectType.GlassBottle}:Check Cap Seal / Tamper Band`]: {
-    lightType: LightType.RingLight,
+    lightType: LightFixture.Ring,
+    lightPosition: LightPosition.Camera,
     lightColor: LightColor.White,
     viewFocus: 'Top',
     objectOrientation: 'Front',
     workingDistance: 200,
     focalLength: 25,
-    cameraAngle: 15 // Slight angle to see under rim
+    cameraAngle: 15
   },
   [`${ObjectType.GlassBottle}:Read Label Text / Date Code`]: {
-    lightType: LightType.RingLight, // Or bars, but Ring is what we have
+    lightType: LightFixture.Bar, // Vertical bars often used
+    lightPosition: LightPosition.Side,
     lightColor: LightColor.White,
     viewFocus: 'Bottom',
     objectOrientation: 'Front',
@@ -81,7 +87,8 @@ export const RECOMMENDED_PRESETS: Record<string, Preset> = {
     cameraAngle: 0
   },
   [`${ObjectType.GlassBottle}:Detect Glass Cracks / Inclusions`]: {
-    lightType: LightType.BackLight,
+    lightType: LightFixture.Panel,
+    lightPosition: LightPosition.Back,
     lightColor: LightColor.White,
     viewFocus: 'Whole',
     objectOrientation: 'Front',
@@ -92,7 +99,8 @@ export const RECOMMENDED_PRESETS: Record<string, Preset> = {
 
   // --- ALUMINUM CAN ---
   [`${ObjectType.AluminumCan}:Read Bottom Dot Peen Code`]: {
-    lightType: LightType.LowAngle, // Casts shadows in dots
+    lightType: LightFixture.Ring, // Low angle ring
+    lightPosition: LightPosition.LowAngle,
     lightColor: LightColor.Red,
     viewFocus: 'Whole',
     objectOrientation: 'Bottom',
@@ -102,7 +110,8 @@ export const RECOMMENDED_PRESETS: Record<string, Preset> = {
     lightIntensity: 100
   },
   [`${ObjectType.AluminumCan}:Inspect Pull Tab Integrity`]: {
-    lightType: LightType.RingLight,
+    lightType: LightFixture.Ring,
+    lightPosition: LightPosition.Camera,
     lightColor: LightColor.White,
     viewFocus: 'Top',
     objectOrientation: 'Top',
@@ -111,7 +120,8 @@ export const RECOMMENDED_PRESETS: Record<string, Preset> = {
     cameraAngle: 0
   },
   [`${ObjectType.AluminumCan}:Verify Print Quality / Color`]: {
-    lightType: LightType.RingLight, // Diffuse would be better, but Ring works
+    lightType: LightFixture.Ring, // Dome/Tunnel preferred but Ring is okay fallback
+    lightPosition: LightPosition.Camera,
     lightColor: LightColor.White,
     viewFocus: 'Middle',
     objectOrientation: 'Front',
@@ -119,8 +129,9 @@ export const RECOMMENDED_PRESETS: Record<string, Preset> = {
     focalLength: 25
   },
   [`${ObjectType.AluminumCan}:Detect Dents or Scratches`]: {
-    lightType: LightType.Coaxial, // Highlights flat surfaces, dents appear dark
-    lightColor: LightColor.Blue, // Metal often contrasts well
+    lightType: LightFixture.Coaxial,
+    lightPosition: LightPosition.Camera,
+    lightColor: LightColor.Blue,
     viewFocus: 'Middle',
     objectOrientation: 'Front',
     workingDistance: 300,
@@ -130,17 +141,19 @@ export const RECOMMENDED_PRESETS: Record<string, Preset> = {
 
   // --- MATTE BLOCK ---
   [`${ObjectType.MatteBlock}:Measure Dimensions (Metrology)`]: {
-    lightType: LightType.BackLight,
-    lightColor: LightColor.Blue, // Short wavelength for precision
+    lightType: LightFixture.Panel,
+    lightPosition: LightPosition.Back,
+    lightColor: LightColor.Blue,
     viewFocus: 'Whole',
     objectOrientation: 'Front',
     workingDistance: 600,
-    focalLength: 75, // Telecentric-ish behavior (less perspective distortion)
+    focalLength: 75,
     aperture: 11,
     cameraAngle: 0
   },
   [`${ObjectType.MatteBlock}:Check Surface Flatness`]: {
-    lightType: LightType.LowAngle,
+    lightType: LightFixture.Bar,
+    lightPosition: LightPosition.Side, // Raking light
     lightColor: LightColor.Red,
     viewFocus: 'Whole',
     objectOrientation: 'Front',
@@ -151,16 +164,18 @@ export const RECOMMENDED_PRESETS: Record<string, Preset> = {
 
   // --- BOTTLE CAP ---
   [`${ObjectType.BottleCap}:Inspect Liner Seal Integrity`]: {
-    lightType: LightType.RingLight,
+    lightType: LightFixture.Ring,
+    lightPosition: LightPosition.Camera,
     lightColor: LightColor.White,
     viewFocus: 'Whole',
-    objectOrientation: 'Bottom', // Look inside
+    objectOrientation: 'Bottom',
     workingDistance: 150,
     focalLength: 25,
     cameraAngle: 0
   },
   [`${ObjectType.BottleCap}:Verify Logo Print Quality`]: {
-    lightType: LightType.RingLight,
+    lightType: LightFixture.Ring,
+    lightPosition: LightPosition.Camera,
     lightColor: LightColor.White,
     viewFocus: 'Whole',
     objectOrientation: 'Top',
@@ -168,13 +183,24 @@ export const RECOMMENDED_PRESETS: Record<string, Preset> = {
     focalLength: 35
   },
   [`${ObjectType.BottleCap}:Check for Deformed Criminp`]: {
-    lightType: LightType.RingLight,
+    lightType: LightFixture.Ring,
+    lightPosition: LightPosition.LowAngle, // To see profile
     lightColor: LightColor.Red,
     viewFocus: 'Middle',
     objectOrientation: 'Side',
     workingDistance: 150,
     focalLength: 25,
     cameraAngle: 10
+  },
+  [`${ObjectType.BottleCap}:Read Top Print Code`]: {
+    lightType: LightFixture.Spot,
+    lightPosition: LightPosition.Top,
+    lightColor: LightColor.White,
+    viewFocus: 'Top',
+    objectOrientation: 'Top',
+    workingDistance: 250,
+    focalLength: 25,
+    cameraAngle: 0
   }
 };
 
