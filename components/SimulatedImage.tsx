@@ -883,8 +883,14 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
           const t3 = new THREE.Object3D(); t3.position.set(len/3, 0, 100);
           barGroup.add(t3); s3.target = t3; s3.angle=0.6; configShadow(s3); barGroup.add(s3);
 
-          const vis = new THREE.Mesh(new THREE.BoxGeometry(len, 20, 10), new THREE.MeshBasicMaterial({ color: visualColor }));
+          // Bar Body
+          const vis = new THREE.Mesh(new THREE.BoxGeometry(len, 20, 10), new THREE.MeshBasicMaterial({ color: 0x334155 }));
           barGroup.add(vis);
+          
+          // Diffuser Face (Emissive) - visually indicates light direction
+          const face = new THREE.Mesh(new THREE.PlaneGeometry(len - 4, 16), new THREE.MeshBasicMaterial({ color: visualColor }));
+          face.position.z = 5.1; // Slightly in front of body
+          barGroup.add(face);
       }
 
       if (state.lightPosition === LightPosition.LowAngle) {
@@ -917,7 +923,8 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
           };
 
           if (config === LightConfig.Single) {
-              addAngledBar(Math.PI/2); // Front
+              // Changed from PI/2 (Front) to 0 (Right Side) to avoid blocking camera
+              addAngledBar(0); 
           } 
           else if (config === LightConfig.Dual) {
               addAngledBar(0); // Right

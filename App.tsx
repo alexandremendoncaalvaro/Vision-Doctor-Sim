@@ -146,9 +146,20 @@ const App: React.FC = () => {
     const obj = state.objectType;
     const isDarkBg = bg === '#050505' || bg === '#064e3b' || bg === '#1e3a8a';
     
-    if (obj === ObjectType.PCB && isDarkBg) res.contrast = 'poor';
-    if (obj === ObjectType.MatteBlock && bg === '#475569') res.contrast = 'poor'; // Gray on Gray
-    if (obj === ObjectType.AluminumCan && !isDarkBg) res.contrast = 'poor'; // Silver on White/Gray
+    // Logic: If inspecting outline/shape (Presence, Dimensions), contrast with BG is critical.
+    // If inspecting surface (OCR, Codes, Scratches), BG contrast matters less.
+    const isSurfaceGoal = 
+       state.inspectionGoal.includes('Text') || 
+       state.inspectionGoal.includes('Code') || 
+       state.inspectionGoal.includes('Bridges') || 
+       state.inspectionGoal.includes('Flatness') || 
+       state.inspectionGoal.includes('Seal');
+
+    if (!isSurfaceGoal) {
+        if (obj === ObjectType.PCB && isDarkBg) res.contrast = 'poor';
+        if (obj === ObjectType.MatteBlock && bg === '#475569') res.contrast = 'poor'; // Gray on Gray
+        if (obj === ObjectType.AluminumCan && !isDarkBg) res.contrast = 'poor'; // Silver on White/Gray
+    }
 
     // 5. Technique & Geometry Check
     // A. Blocking View Check
