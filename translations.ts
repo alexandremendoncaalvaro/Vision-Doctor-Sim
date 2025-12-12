@@ -1,5 +1,64 @@
 
+
 import { Language } from './types';
+
+export const GOAL_TRANSLATIONS: Record<string, Record<Language, string>> = {
+  "Read Laser Etched Text (OCR)": {
+    "pt-BR": "Ler Texto Gravado a Laser (OCR)",
+    "en": "Read Laser Etched Text (OCR)",
+    "es": "Leer Texto Grabado con Láser (OCR)"
+  },
+  "Check Solder Bridges (Shorts)": {
+    "pt-BR": "Verificar Pontes de Solda (Curtos)",
+    "en": "Check Solder Bridges (Shorts)",
+    "es": "Verificar Puentes de Soldadura (Cortos)"
+  },
+  "Verify Component Presence": {
+    "pt-BR": "Verificar Presença de Componentes",
+    "en": "Verify Component Presence",
+    "es": "Verificar Presencia de Componentes"
+  },
+  "Inspect Fill Level": {
+    "pt-BR": "Inspecionar Nível de Enchimento",
+    "en": "Inspect Fill Level",
+    "es": "Inspeccionar Nivel de Llenado"
+  },
+  "Read Label Text": {
+    "pt-BR": "Ler Texto do Rótulo",
+    "en": "Read Label Text",
+    "es": "Leer Texto de la Etiqueta"
+  },
+  "Read Bottom Dot Peen Code": {
+    "pt-BR": "Ler Código Dot Peen no Fundo",
+    "en": "Read Bottom Dot Peen Code",
+    "es": "Leer Código Dot Peen Inferior"
+  },
+  "Inspect Pull Tab Integrity": {
+    "pt-BR": "Inspecionar Integridade do Anel",
+    "en": "Inspect Pull Tab Integrity",
+    "es": "Inspeccionar Integridad de la Anilla"
+  },
+  "Measure Dimensions (Backlight)": {
+    "pt-BR": "Medir Dimensões (Backlight)",
+    "en": "Measure Dimensions (Backlight)",
+    "es": "Medir Dimensiones (Luz Trasera)"
+  },
+  "Check Surface Flatness": {
+    "pt-BR": "Verificar Planicidade da Superfície",
+    "en": "Check Surface Flatness",
+    "es": "Verificar Planitud de la Superficie"
+  },
+  "Read Top Print Code": {
+    "pt-BR": "Ler Código Impresso no Topo",
+    "en": "Read Top Print Code",
+    "es": "Leer Código Impreso Superior"
+  },
+  "Inspect Liner Seal Integrity": {
+    "pt-BR": "Inspecionar Integridade da Vedação",
+    "en": "Inspect Liner Seal Integrity",
+    "es": "Inspeccionar Integridad del Sello"
+  }
+};
 
 export const TEXTS = {
   'pt-BR': {
@@ -33,7 +92,9 @@ export const TEXTS = {
     lineSpeed: "Velocidade da Linha",
     vibration: "Nível de Vibração",
     roiSize: "Tamanho da ROI",
-    
+    globalEnv: "Ambiente Global",
+    globalIntensity: "Intensidade Global",
+
     analyzeBtn: "",
     analyzing: "",
     autoTune: "Auto-Configurar",
@@ -53,19 +114,21 @@ export const TEXTS = {
         Front: "Frente", Side: "Lado", Back: "Trás", Top: "Topo", Bottom: "Baixo"
     },
     fixtures: {
-        "Ring": "Anel (Ring)",
-        "Bar": "Barra (Bar)",
-        "Spot": "Spot",
-        "Panel": "Painel (Backlight)",
-        "Coaxial": "Coaxial"
+        "Ring Light": "Anel (Ring)",
+        "Bar Light": "Barra (Bar)",
+        "Spot Light": "Spot",
+        "Backlight Panel": "Painel (Backlight)",
+        "Coaxial": "Coaxial",
+        "Dome (Cloudy Day)": "Domo (Dome)",
+        "Tunnel (Flat Dome)": "Túnel (Flat Dome)"
     },
     positions: {
-        "Camera Axis": "Eixo da Câmera",
-        "Backlight": "Backlight (Atrás)",
-        "Top": "Topo",
-        "Side": "Lateral",
-        "Low Angle": "Ângulo Baixo",
-        "Multi-Angle": "Multi-Ângulo"
+        "Camera Axis (Bright Field)": "Eixo Câmera (Campo Claro)",
+        "Backlight (Silhouette)": "Backlight (Silhueta)",
+        "Top (Direct)": "Topo (Direto)",
+        "Side (Oblique)": "Lateral (Oblíquo)",
+        "Low Angle (Dark Field)": "Ângulo Baixo (Campo Escuro)",
+        "Surrounding (Diffuse)": "Envolvente (Difuso)"
     },
     configs: {
         "Small": "Pequeno",
@@ -79,6 +142,11 @@ export const TEXTS = {
     },
     colors: {
         "White": "Branco", "Red": "Vermelho", "Blue": "Azul", "Infrared": "Infravermelho", "UV": "UV"
+    },
+    envs: {
+        "Studio (Dark Box)": "Estúdio (Caixa Escura)",
+        "Factory Floor": "Fábrica (Luz Fria)",
+        "Direct Sunlight": "Luz Solar (Direta)"
     },
     
     schematic: "Esquemático",
@@ -155,6 +223,9 @@ export const TEXTS = {
     lineSpeed: "Line Speed",
     vibration: "Vibration Level",
     roiSize: "ROI Size",
+    globalEnv: "Global Environment",
+    globalIntensity: "Global Intensity",
+
     analyzeBtn: "",
     analyzing: "",
     autoTune: "Auto-Tune",
@@ -173,19 +244,21 @@ export const TEXTS = {
         Front: "Front", Side: "Side", Back: "Back", Top: "Top", Bottom: "Bottom"
     },
     fixtures: {
-        "Ring": "Ring Light",
-        "Bar": "Bar Light",
-        "Spot": "Spot Light",
-        "Panel": "Panel (Backlight)",
-        "Coaxial": "Coaxial"
+        "Ring Light": "Ring Light",
+        "Bar Light": "Bar Light",
+        "Spot Light": "Spot Light",
+        "Backlight Panel": "Backlight Panel",
+        "Coaxial": "Coaxial",
+        "Dome (Cloudy Day)": "Dome (Cloudy Day)",
+        "Tunnel (Flat Dome)": "Tunnel (Flat Dome)"
     },
     positions: {
-        "Camera Axis": "Camera Axis",
-        "Backlight": "Backlight (Behind)",
-        "Top": "Top",
-        "Side": "Side",
-        "Low Angle": "Low Angle",
-        "Multi-Angle": "Multi-Angle"
+        "Camera Axis (Bright Field)": "Camera Axis (Bright Field)",
+        "Backlight (Silhouette)": "Backlight (Silhouette)",
+        "Top (Direct)": "Top (Direct)",
+        "Side (Oblique)": "Side (Oblique)",
+        "Low Angle (Dark Field)": "Low Angle (Dark Field)",
+        "Surrounding (Diffuse)": "Surrounding (Diffuse)"
     },
     configs: {
         "Small": "Small",
@@ -199,6 +272,11 @@ export const TEXTS = {
     },
     colors: {
         "White": "White", "Red": "Red", "Blue": "Blue", "Infrared": "Infrared", "UV": "UV"
+    },
+    envs: {
+        "Studio (Dark Box)": "Studio (Dark Box)",
+        "Factory Floor": "Factory Floor (Cool)",
+        "Direct Sunlight": "Direct Sunlight"
     },
     schematic: "Schematic",
     simulator: "Simulator",
@@ -269,6 +347,8 @@ export const TEXTS = {
     lineSpeed: "Velocidad de Línea",
     vibration: "Nivel de Vibración",
     roiSize: "Tamaño de ROI",
+    globalEnv: "Entorno Global",
+    globalIntensity: "Intensidad Global",
     analyzeBtn: "",
     analyzing: "",
     autoTune: "Auto-Ajustar",
@@ -287,19 +367,21 @@ export const TEXTS = {
         Front: "Frente", Side: "Lado", Back: "Atrás", Top: "Superior", Bottom: "Inferior"
     },
     fixtures: {
-        "Ring": "Anillo (Ring)",
-        "Bar": "Barra (Bar)",
-        "Spot": "Spot",
-        "Panel": "Panel (Luz Trasera)",
-        "Coaxial": "Coaxial"
+        "Ring Light": "Anillo (Ring)",
+        "Bar Light": "Barra (Bar)",
+        "Spot Light": "Spot",
+        "Backlight Panel": "Panel (Luz Trasera)",
+        "Coaxial": "Coaxial",
+        "Dome (Cloudy Day)": "Domo (Dome)",
+        "Tunnel (Flat Dome)": "Túnel (Flat Dome)"
     },
     positions: {
-        "Camera Axis": "Eje de Cámara",
-        "Backlight": "Luz Trasera (Atrás)",
-        "Top": "Superior",
-        "Side": "Lateral",
-        "Low Angle": "Ángulo Bajo",
-        "Multi-Angle": "Multi-Ángulo"
+        "Camera Axis (Bright Field)": "Eje de Cámara (Campo Claro)",
+        "Backlight (Silhouette)": "Luz Trasera (Silueta)",
+        "Top (Direct)": "Superior (Directo)",
+        "Side (Oblique)": "Lateral (Oblicuo)",
+        "Low Angle (Dark Field)": "Ángulo Bajo (Campo Oscuro)",
+        "Surrounding (Diffuse)": "Envolvente (Difuso)"
     },
     configs: {
         "Small": "Pequeño",
@@ -313,6 +395,11 @@ export const TEXTS = {
     },
     colors: {
         "White": "Blanco", "Red": "Rojo", "Blue": "Azul", "Infrared": "Infrarrojo", "UV": "UV"
+    },
+    envs: {
+        "Studio (Dark Box)": "Estudio (Caja Oscura)",
+        "Factory Floor": "Fábrica (Luz Fría)",
+        "Direct Sunlight": "Luz Solar (Directa)"
     },
     schematic: "Esquemático",
     simulator: "Simulador",
@@ -353,68 +440,5 @@ export const TEXTS = {
     valBright: "Brillante",
     valWrongGeo: "Luz Bloquea Cámara",
     valWrongTech: "Técnica Incorrecta"
-  }
-};
-
-export const GOAL_TRANSLATIONS: Record<string, Record<Language, string>> = {
-  // PCB
-  "Check Solder Bridges (Shorts)": { 
-      "en": "Check Solder Bridges (Shorts)", 
-      "pt-BR": "Verificar Pontes de Solda (Curto)", 
-      "es": "Verificar Puentes de Soldadura (Cortos)" 
-  },
-  "Verify Component Presence": { 
-      "en": "Verify Component Presence", 
-      "pt-BR": "Verificar Presença de Componentes", 
-      "es": "Verificar Presencia de Componentes" 
-  },
-  "Read Laser Etched Text (OCR)": { 
-      "en": "Read Laser Etched Text (OCR)", 
-      "pt-BR": "Ler Texto Gravado a Laser (OCR)", 
-      "es": "Leer Texto Grabado con Láser (OCR)" 
-  },
-  // Glass Bottle
-  "Inspect Fill Level": { 
-      "en": "Inspect Fill Level", 
-      "pt-BR": "Inspecionar Nível de Enchimento", 
-      "es": "Inspeccionar Nivel de Llenado" 
-  },
-  "Read Label Text": { 
-      "en": "Read Label Text", 
-      "pt-BR": "Ler Texto do Rótulo", 
-      "es": "Leer Texto de Etiqueta" 
-  },
-  // Aluminum Can
-  "Read Bottom Dot Peen Code": { 
-      "en": "Read Bottom Dot Peen Code", 
-      "pt-BR": "Ler Código Dot Peen no Fundo", 
-      "es": "Leer Código Dot Peen en el Fondo" 
-  },
-  "Inspect Pull Tab Integrity": { 
-      "en": "Inspect Pull Tab Integrity", 
-      "pt-BR": "Inspecionar Integridade do Anel de Abertura", 
-      "es": "Inspeccionar Integridad de la Anilla" 
-  },
-  // Matte Block
-  "Measure Dimensions (Backlight)": { 
-      "en": "Measure Dimensions (Backlight)", 
-      "pt-BR": "Medir Dimensões (Backlight)", 
-      "es": "Medir Dimensiones (Luz Trasera)" 
-  },
-  "Check Surface Flatness": { 
-      "en": "Check Surface Flatness", 
-      "pt-BR": "Verificar Planicidade da Superfície", 
-      "es": "Verificar Planitud de la Superficie" 
-  },
-  // Bottle Cap
-  "Inspect Liner Seal Integrity": { 
-      "en": "Inspect Liner Seal Integrity", 
-      "pt-BR": "Inspecionar Integridade do Vedante (Liner)", 
-      "es": "Inspeccionar Integridad del Sello (Liner)" 
-  },
-  "Read Top Print Code": { 
-      "en": "Read Top Print Code", 
-      "pt-BR": "Ler Código Impresso no Topo", 
-      "es": "Leer Código Impreso en la Parte Superior" 
   }
 };

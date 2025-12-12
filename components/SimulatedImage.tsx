@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { SimulationState, OpticalMetrics, LightColor, LightFixture, LightPosition, LightConfig, ObjectType, Language } from '../types';
+import { SimulationState, OpticalMetrics, LightColor, LightFixture, LightPosition, LightConfig, ObjectType, Language, GlobalEnv } from '../types';
 import { OBJECT_DIMS } from '../constants';
 import { TEXTS } from '../translations';
 
@@ -25,6 +25,9 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
   const controlsRef = useRef<OrbitControls | null>(null);
   const frameIdRef = useRef<number>(0);
 
+  // Store the env map texture so we don't regenerate it every frame
+  const envMapRef = useRef<THREE.Texture | null>(null);
+
   // State Refs
   const viewTypeRef = useRef(viewType);
   const keysPressed = useRef<Set<string>>(new Set());
@@ -33,6 +36,7 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
   const lightsGroupRef = useRef<THREE.Group | null>(null);
   const objectGroupRef = useRef<THREE.Group | null>(null);
   const camModelRef = useRef<THREE.Group | null>(null);
+  const enclosureRef = useRef<THREE.Mesh | null>(null);
 
   useEffect(() => {
     viewTypeRef.current = viewType;
@@ -78,17 +82,33 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // --- ENVIRONMENT MAP ---
+    // --- ENVIRONMENT MAP (Pre-generate for Factory/Sunlight reflections) ---
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     pmremGenerator.compileEquirectangularShader();
     const envTexture = pmremGenerator.fromScene(new RoomEnvironment()).texture;
-    scene.environment = envTexture;
+    envMapRef.current = envTexture;
+    
+    // Initial Background
     scene.background = new THREE.Color('#050505');
 
     const controls = new OrbitControls(freeCam, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controlsRef.current = controls;
+
+    // --- ENCLOSURE (Physical Studio Box) ---
+    // Stainless Steel Cabinet look
+    const enclosureGeo = new THREE.BoxGeometry(4000, 4000, 4000);
+    const enclosureMat = new THREE.MeshStandardMaterial({ 
+        color: 0x707070, // Medium grey (Stainless Steel base)
+        roughness: 0.4,  // Semi-reflective (Satin finish)
+        metalness: 0.7,  // High metalness
+        side: THREE.BackSide 
+    });
+    const enclosure = new THREE.Mesh(enclosureGeo, enclosureMat);
+    enclosure.receiveShadow = true;
+    scene.add(enclosure);
+    enclosureRef.current = enclosure;
 
     const lightsGroup = new THREE.Group();
     scene.add(lightsGroup);
@@ -174,11 +194,21 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
 
   // --- UPDATES ---
 
+  // Handle Background Color (Only applies if NOT in Studio Mode)
   useEffect(() => {
-    if (sceneRef.current) {
-       sceneRef.current.background = new THREE.Color(state.backgroundColor);
+    if (!sceneRef.current || !enclosureRef.current) return;
+
+    if (state.globalEnv === GlobalEnv.Studio) {
+         // In Studio Mode, we use the physical enclosure.
+         // We set background to null so the "BackSide" mesh is visible.
+         sceneRef.current.background = null; 
+         enclosureRef.current.visible = true;
+    } else {
+         // In Factory/Sunlight, we use the abstract background color or map.
+         sceneRef.current.background = new THREE.Color(state.backgroundColor);
+         enclosureRef.current.visible = false;
     }
-  }, [state.backgroundColor]);
+  }, [state.backgroundColor, state.globalEnv]);
 
   useEffect(() => {
     if (rendererRef.current) {
@@ -194,6 +224,19 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
 
   useEffect(() => {
     if (!sceneRef.current || !lightsGroupRef.current || !objectGroupRef.current || !camModelRef.current || !cameraRef.current) return;
+
+    // --- GLOBAL ENVIRONMENT UPDATE ---
+    const scene = sceneRef.current;
+    
+    if (state.globalEnv === GlobalEnv.Studio) {
+        // Studio Box: Use the light calculation to determine reflections/bounces
+        scene.environment = null;
+        scene.environmentIntensity = 0;
+    } else {
+        // Factory / Sunlight: Use RoomEnv for reflections
+        scene.environment = envMapRef.current;
+        scene.environmentIntensity = (state.globalIntensity / 100) * 1.5; 
+    }
 
     const objectHeight = OBJECT_DIMS[state.objectType].h;
     
@@ -630,15 +673,14 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
       const aluMat = new THREE.MeshStandardMaterial({
            color: 0xffffff,
            map: createBeerLabelTexture("RoboHops", "Neural IPA", 200),
-           metalness: 0.6, // Reduced from 0.7 to reduce glare blowout
-           roughness: 0.35, // Increased from 0.25
-           envMapIntensity: 1.0
+           metalness: 0.6, // Kept lower to show up without Env Map
+           roughness: 0.35, 
+           // envMapIntensity removed (no env map)
       });
       const topMat = new THREE.MeshStandardMaterial({ 
           color: 0xe5e5e5, 
           metalness: 0.9, 
           roughness: 0.2,
-          envMapIntensity: 1.2
       });
 
       const bodyH = h * 0.8;
@@ -705,273 +747,350 @@ function updateObject(group: THREE.Group, type: ObjectType, orientation: string)
 function updateLights(group: THREE.Group, state: SimulationState, camY: number, camZ: number, targetY: number) {
   while(group.children.length > 0){ group.remove(group.children[0]); }
   
+  // 1. GLOBAL ILLUMINATION (INDEPENDENT of Fixture)
+  const globalInt = state.globalIntensity / 100; // 0 to 1
+  
+  if (state.globalEnv === GlobalEnv.Studio) {
+      // PITCH BLACK STUDIO (PHYSICAL BOX):
+      // In Three.js, light doesn't bounce off walls automatically (no GI).
+      // We must SIMULATE the light bouncing off the metallic enclosure walls.
+      // If there is a strong light, we add a proportional Ambient/Hemi light
+      // to "fill" the shadows, simulating the bounce inside the cabinet.
+      
+      const bounceIntensity = (state.lightIntensity / 100) * 0.15; // 15% bounce
+      if (bounceIntensity > 0.01) {
+          // Use light color for the bounce
+          const lightHex = getLightColorHex(state.lightColor);
+          // Hemisphere light: Sky = Light Color, Ground = Dark Floor Color
+          const bounce = new THREE.HemisphereLight(lightHex, 0x111111, bounceIntensity);
+          group.add(bounce);
+      } else {
+          // Absolute minimum visibility
+          const studioAmb = new THREE.AmbientLight(0xffffff, 0.01);
+          group.add(studioAmb);
+      }
+
+  } 
+  else if (state.globalEnv === GlobalEnv.Factory) {
+      const hemi = new THREE.HemisphereLight(0xddeeff, 0x333333, globalInt * 1.0);
+      group.add(hemi);
+      // Soft overhead factory light
+      const topFill = new THREE.DirectionalLight(0xffffff, globalInt * 0.5);
+      topFill.position.set(50, 200, 50);
+      group.add(topFill);
+  } 
+  else if (state.globalEnv === GlobalEnv.Sunlight) {
+      const hemi = new THREE.HemisphereLight(0xffffee, 0x443322, globalInt * 0.5);
+      group.add(hemi);
+      const sun = new THREE.DirectionalLight(0xfff0dd, globalInt * 3.0);
+      sun.position.set(100, 200, 100);
+      sun.castShadow = true;
+      group.add(sun);
+  }
+
+  // 2. FIXTURE ILLUMINATION
+  
   const intensityPercent = state.lightIntensity;
   const baseIntensity = intensityPercent / 100;
   const colorHex = getLightColorHex(state.lightColor);
-  const visualColor = new THREE.Color(colorHex).multiplyScalar(0.5 + baseIntensity); 
-  
-  let ambientIntensity = 0.02 + (baseIntensity * 0.05);
-  // Add bounce light for Backlight mode so opaque objects aren't pitch black voids
-  if (state.lightPosition === LightPosition.Back) {
-      ambientIntensity += 0.5; 
-  }
-  const ambient = new THREE.AmbientLight(colorHex, ambientIntensity);
-  group.add(ambient);
-
   const dist = state.lightDistance || 200;
   
-  // Calculate bounding box offsets to prevent clipping
-  const objDim = OBJECT_DIMS[state.objectType];
-  const halfW = objDim.w / 2;
-  const halfH = objDim.h / 2;
-  const halfD = objDim.depth / 2;
-
-  let lightPos = new THREE.Vector3();
-  let lightTarget = new THREE.Vector3(0, targetY, 0);
-
-  // Position Logic
-  switch (state.lightPosition) {
-    case LightPosition.Camera:
-      lightPos.set(0, camY, camZ);
-      break;
-    case LightPosition.Back:
-      lightPos.set(0, targetY, -halfD - dist);
-      break;
-    case LightPosition.Top:
-      lightPos.set(0, halfH + dist, dist * 0.5); 
-      break;
-    case LightPosition.Side:
-      lightPos.set(halfW + dist, targetY, dist * 0.5);
-      break;
-    case LightPosition.LowAngle:
-      lightPos.set(0, 0, 0); // Handled specially in fixture logic
-      break;
-    default:
-      lightPos.set(0, 0, dist);
-  }
-
-  const fixtureGroup = new THREE.Group();
-  
-  if (state.lightPosition === LightPosition.LowAngle) {
-      fixtureGroup.position.set(0, targetY, 0);
-      fixtureGroup.lookAt(0, camY, camZ); 
-      group.add(fixtureGroup);
-  } else {
-      fixtureGroup.position.copy(lightPos);
-      fixtureGroup.lookAt(lightTarget);
-      group.add(fixtureGroup);
-  }
-
+  // Helper for Shadows
   const configShadow = (light: THREE.Light) => {
     light.castShadow = true;
-    light.shadow.mapSize.width = 512; // Reduced from 1024 to save texture units
-    light.shadow.mapSize.height = 512;
-    light.shadow.bias = -0.0005;
-    light.shadow.camera.near = 10;
-    light.shadow.camera.far = 2000;
+    light.shadow.mapSize.width = 1024;
+    light.shadow.mapSize.height = 1024;
+    light.shadow.bias = -0.0001;
+    // light.shadow.radius = 1; // Slight soft shadow
   };
 
+  // Higher intensity scale needed for Spot/Point lights in ACES Filmic workflow
+  // especially when they have decay enabled.
+  const DIRECTIONAL_SCALE = 50.0; 
+  const SPOT_SCALE = 400.0;
+
+  const targetVec = new THREE.Vector3(0, targetY, 0);
   const fixture = state.lightType;
-  const config = state.lightConfig;
 
-  // Normalized intensity scale for all lights to ensure 100% intensity ~ 5.0 - 10.0 range
-  // This prevents the "instant white" blowout at 1%
-  const GLOBAL_INTENSITY_SCALE = 10.0;
+  // --- DOME & TUNNEL (DIFFUSE) ---
+  if (fixture === LightFixture.Dome || fixture === LightFixture.Tunnel) {
+       // These ARE allowed to add Ambient/Hemisphere light because that is their physical nature.
+       // They represent scattered light coming from all directions.
+       
+       const isTunnel = fixture === LightFixture.Tunnel;
+       const geo = isTunnel 
+           ? new THREE.CylinderGeometry(dist, dist, dist*3, 32, 1, true)
+           : new THREE.SphereGeometry(dist, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.5);
 
-  // Helper to add a spot in Local Space
-  const addSpot = (x:number, y:number, z:number, angle:number, intensityMult: number = 1.0) => {
-     // Use normalized intensity scale
-     const intensity = baseIntensity * GLOBAL_INTENSITY_SCALE * intensityMult;
-     const s = new THREE.SpotLight(colorHex, intensity);
-     s.position.set(x, y, z);
-     
-     const targetObj = new THREE.Object3D();
-     targetObj.position.set(x, y, z + 100); 
-     
-     fixtureGroup.add(targetObj);
-     s.target = targetObj;
-     
-     s.angle = angle;
-     s.penumbra = 0.5;
-     s.decay = 0; // Linear falloff for consistent brightness
-     s.distance = 2000;
-     configShadow(s);
-     fixtureGroup.add(s);
-  };
+       const mat = new THREE.MeshBasicMaterial({
+           color: colorHex,
+           side: THREE.BackSide, 
+           transparent: true,
+           opacity: 0.1 + (baseIntensity * 0.3), 
+       });
+       const domeMesh = new THREE.Mesh(geo, mat);
+       if (isTunnel) {
+           domeMesh.rotation.z = Math.PI / 2;
+           domeMesh.position.y = targetY;
+       } else {
+           domeMesh.position.y = targetY;
+       }
+       group.add(domeMesh);
 
-  if (fixture === LightFixture.Ring) {
-     if (state.lightPosition === LightPosition.LowAngle) {
-         const standoff = Math.max(halfD + 10, 20); 
-         const r = Math.max(dist, halfW + 20); 
-
-         const count = 4;
-         for(let i=0; i<count; i++) {
-            const a = (i/count)*Math.PI*2;
-            const s = new THREE.SpotLight(colorHex, baseIntensity * GLOBAL_INTENSITY_SCALE * 0.8); // Scale ~8.0 total
-            s.position.set(Math.cos(a)*r, Math.sin(a)*r, standoff);
-            s.target.position.set(0, 0, 0);
-            s.angle = 0.6; s.penumbra = 0.5; s.decay = 0; s.distance = 1000;
-            configShadow(s);
-            fixtureGroup.add(s); fixtureGroup.add(s.target);
-         }
-         const ringVis = new THREE.Mesh(new THREE.TorusGeometry(r, 2, 8, 32), new THREE.MeshBasicMaterial({ color: visualColor }));
-         ringVis.position.z = standoff;
-         fixtureGroup.add(ringVis);
-
-     } else {
-         const r = 45; 
-         const count = 4;
-         for(let i=0; i<count; i++) {
-             const a = (i/count)*Math.PI*2;
-             // Scale ~2.0 per light * 4 lights = 8.0 total
-             addSpot(Math.cos(a)*r, Math.sin(a)*r, 0, 0.6, 0.5); 
-         }
-         const ringVis = new THREE.Mesh(new THREE.TorusGeometry(r, 4, 8, 32), new THREE.MeshBasicMaterial({ color: visualColor }));
-         fixtureGroup.add(ringVis);
-     }
-  } 
-  else if (fixture === LightFixture.Panel) {
-      let size = 300; 
-      if (config === LightConfig.Small) size = 150;
-      if (config === LightConfig.Large) size = 450;
-
-      // UNIFIED LOGIC: Use Single Light Source to save texture units
-      if (state.lightPosition === LightPosition.Back) {
-           // Directional Light for Backlight (Simulates infinite panel)
-           // Scale ~3.0 for background
-           const dl = new THREE.DirectionalLight(colorHex, baseIntensity * 3.0);
-           dl.position.set(0, 0, 0); 
-           const t = new THREE.Object3D(); t.position.set(0, 0, 100); fixtureGroup.add(t); dl.target = t;
-           configShadow(dl);
-           
-           const d = size/2;
-           dl.shadow.camera.left = -d; dl.shadow.camera.right = d;
-           dl.shadow.camera.top = d; dl.shadow.camera.bottom = -d;
-           fixtureGroup.add(dl);
-      } else {
-           // Spot for others
-           addSpot(0, 0, 0, 1.2, 1.0); 
-      }
-      
-      const plane = new THREE.Mesh(
-          new THREE.PlaneGeometry(size, size), 
-          new THREE.MeshBasicMaterial({ color: visualColor, side: THREE.DoubleSide })
-      );
-      fixtureGroup.add(plane);
+       // The actual light source for Dome is ambient/hemi
+       const hemi = new THREE.HemisphereLight(colorHex, 0x050505, baseIntensity * 5.0);
+       group.add(hemi);
+       
+       // Plus a very soft top down light for a tiny bit of definition
+       const dl = new THREE.DirectionalLight(colorHex, baseIntensity * 2.0);
+       dl.position.set(0, 200, 0);
+       dl.target.position.copy(targetVec);
+       group.add(dl);
+       group.add(dl.target);
   }
-  else if (fixture === LightFixture.Bar) {
-      const len = 100;
+  else if (fixture === LightFixture.Panel && state.lightPosition === LightPosition.Back) {
+      // --- BACKLIGHT ---
+      // Collimated Directional Light from behind
       
-      const createBar = (groupToAddTo: THREE.Group, x: number, y: number, rotZ: number = 0) => {
-          const barGroup = new THREE.Group();
-          barGroup.position.set(x, y, 0);
-          barGroup.rotation.z = rotZ;
-          groupToAddTo.add(barGroup);
+      const objDim = OBJECT_DIMS[state.objectType];
+      const zPos = - (objDim.depth/2) - dist;
 
-          let count = 3;
-          let intensityMult = 1.0;
+      // Visual Panel
+      const panelGeo = new THREE.PlaneGeometry(400, 400);
+      const panelMat = new THREE.MeshBasicMaterial({ color: colorHex });
+      const panel = new THREE.Mesh(panelGeo, panelMat);
+      panel.position.set(0, targetY, zPos); 
+      group.add(panel);
 
-          if (config === LightConfig.Quad) {
-             count = 1; 
-             intensityMult = 3.0; // Boost single light intensity
-          } else if (config === LightConfig.Dual) {
-             count = 2; 
-             intensityMult = 1.5;
-          }
-
-          // Target ~8.0-10.0 total intensity for bar
-          const spotInt = GLOBAL_INTENSITY_SCALE * intensityMult;
-          
-          if (count === 1) {
-             const s = new THREE.SpotLight(colorHex, baseIntensity * spotInt);
-             // Move light slightly forward (Z=5) to avoid self-shadowing from the casing (which goes from -5 to +5)
-             s.position.set(0, 0, 6);
-             const t = new THREE.Object3D(); t.position.set(0, 0, 100); barGroup.add(t); s.target = t;
-             s.angle = 1.0; configShadow(s); barGroup.add(s);
-          } else {
-              const step = len / (count - 1 || 1); 
-              for(let i=0; i<count; i++) {
-                 const xPos = (-len/2) + (i * step);
-                 // Distribute intensity
-                 const s = new THREE.SpotLight(colorHex, baseIntensity * spotInt / count * 1.5);
-                 // Move light slightly forward
-                 s.position.set(xPos, 0, 6);
-                 const t = new THREE.Object3D(); t.position.set(xPos, 0, 100); barGroup.add(t); s.target = t;
-                 s.angle = 0.9; configShadow(s); barGroup.add(s);
-              }
-          }
-
-          const vis = new THREE.Mesh(new THREE.BoxGeometry(len, 20, 10), new THREE.MeshBasicMaterial({ color: 0x334155 }));
-          barGroup.add(vis);
-          
-          const face = new THREE.Mesh(new THREE.PlaneGeometry(len - 4, 16), new THREE.MeshBasicMaterial({ color: visualColor }));
-          face.position.z = 5.1; 
-          barGroup.add(face);
-      }
-
-      if (state.lightPosition === LightPosition.LowAngle) {
-          const standoff = Math.max(halfD + 10, 30); 
-          const radius = Math.max(dist, halfW + 30); 
-
-          const addAngledBar = (angleRad: number) => {
-               const bx = Math.cos(angleRad) * radius;
-               const by = Math.sin(angleRad) * radius;
-               
-               const holder = new THREE.Group();
-               holder.position.set(bx, by, standoff);
-               holder.lookAt(0, 0, 0); 
-               fixtureGroup.add(holder);
-
-               createBar(holder, 0, 0, 0);
-          };
-
-          if (config === LightConfig.Single) {
-              addAngledBar(0); 
-          } 
-          else if (config === LightConfig.Dual) {
-              addAngledBar(0); // Right
-              addAngledBar(Math.PI); // Left
-          }
-          else if (config === LightConfig.Quad) {
-              addAngledBar(0);
-              addAngledBar(Math.PI/2);
-              addAngledBar(Math.PI);
-              addAngledBar(-Math.PI/2);
-          }
-
-      } else {
-          createBar(fixtureGroup, 0, 0, 0); 
-
-          if (config === LightConfig.Dual) {
-               fixtureGroup.clear(); 
-               createBar(fixtureGroup, -60, 0, 0);
-               createBar(fixtureGroup, 60, 0, 0);
-          }
-          else if (config === LightConfig.Quad) {
-              fixtureGroup.clear();
-              const offset = 70;
-              createBar(fixtureGroup, 0, offset, 0);
-              createBar(fixtureGroup, 0, -offset, 0);
-              createBar(fixtureGroup, -offset, 0, Math.PI/2);
-              createBar(fixtureGroup, offset, 0, Math.PI/2);
-          }
-      }
-  }
-  else if (fixture === LightFixture.Spot) {
-      const angle = config === LightConfig.Narrow ? 0.2 : 0.6;
-      addSpot(0, 0, 0, angle, 1.5); // ~15.0 total
-      const spotVis = new THREE.Mesh(new THREE.CylinderGeometry(5, 10, 15), new THREE.MeshBasicMaterial({ color: visualColor }));
-      spotVis.rotation.x = Math.PI/2;
-      fixtureGroup.add(spotVis);
+      // Physics Light
+      // Backlight needs to be bright to saturate sensor (silhouette)
+      const dl = new THREE.DirectionalLight(colorHex, baseIntensity * 10.0);
+      dl.position.set(0, targetY, zPos + 10);
+      dl.target.position.set(0, targetY, 200);
+      group.add(dl);
+      group.add(dl.target);
   }
   else if (fixture === LightFixture.Coaxial) {
-      addSpot(0, 0, 0, 0.25, 1.2); // ~12.0 total
-      const box = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 40), new THREE.MeshBasicMaterial({ color: visualColor }));
-      if (state.lightPosition === LightPosition.Camera) {
-          box.position.x = 40; 
-      }
-      fixtureGroup.add(box);
+      // --- COAXIAL ---
+      // Collimated Directional Light from Camera Axis
+      
+      const dl = new THREE.DirectionalLight(colorHex, baseIntensity * 5.0); // No decay for Directional
+      dl.position.set(0, camY, camZ);
+      dl.target.position.copy(targetVec);
+      configShadow(dl);
+      group.add(dl);
+      group.add(dl.target);
+
+      // Visual Box
+      const box = new THREE.Mesh(new THREE.BoxGeometry(40, 40, 60), new THREE.MeshBasicMaterial({ color: 0x333333 }));
+      box.position.set(30, camY, camZ - 50);
+      group.add(box);
   }
+  else if (fixture === LightFixture.Spot) {
+      // --- SPOT ---
+      // Point/Spot source with DECAY. Distance matters!
+      
+      const fixtureGroup = new THREE.Group();
+      let x=0, y=targetY, z=0;
+      
+      if (state.lightPosition === LightPosition.Top) { x=0; y=targetY+dist; z=0; }
+      else if (state.lightPosition === LightPosition.Side) { x=dist; y=targetY; z=0; }
+      else { 
+          // Fallback to top if undefined for spot
+           x=0; y=targetY+dist; z=0;
+      }
+      
+      fixtureGroup.position.set(x, y, z);
+      fixtureGroup.lookAt(targetVec);
+      group.add(fixtureGroup);
+
+      const s = new THREE.SpotLight(colorHex, baseIntensity * SPOT_SCALE);
+      s.position.set(0, 0, 0);
+      s.target.position.set(0, 0, 100); 
+      
+      s.angle = state.lightConfig === LightConfig.Narrow ? 0.25 : 0.5;
+      s.penumbra = 0.3;
+      s.decay = 2; // Physical falloff
+      s.distance = dist * 4; // Light reaches 0 intensity at 4x the mounting distance
+      
+      configShadow(s);
+      fixtureGroup.add(s);
+      fixtureGroup.add(s.target);
+
+      // Visual Bulb
+      const bulb = new THREE.Mesh(new THREE.CylinderGeometry(5, 10, 15), new THREE.MeshBasicMaterial({ color: colorHex }));
+      bulb.rotation.x = Math.PI / 2;
+      fixtureGroup.add(bulb);
+  }
+  else if (fixture === LightFixture.Ring) {
+      // --- RING LIGHT ---
+      // Array of Spots. Decay enabled.
+      
+      const isLowAngle = state.lightPosition === LightPosition.LowAngle;
+      const ringGroup = new THREE.Group();
+      
+      if (isLowAngle) {
+          const r = Math.max(dist, 60);
+          ringGroup.position.set(0, targetY, 0);
+          group.add(ringGroup);
+
+          const torus = new THREE.Mesh(new THREE.TorusGeometry(r, 4, 8, 32), new THREE.MeshBasicMaterial({ color: colorHex }));
+          torus.rotation.x = Math.PI / 2;
+          ringGroup.add(torus);
+
+          const count = 8;
+          for(let i=0; i<count; i++) {
+              const a = (i/count) * Math.PI * 2;
+              const sx = Math.cos(a) * r;
+              const sz = Math.sin(a) * r;
+              
+              const s = new THREE.SpotLight(colorHex, baseIntensity * SPOT_SCALE * 0.4); // Less intensity per bulb
+              s.position.set(sx, 5, sz);
+              s.target.position.set(0, 0, 0);
+              s.angle = 0.5;
+              s.penumbra = 0.5;
+              s.decay = 2;
+              s.distance = 200; // Low angle is close range
+              configShadow(s);
+              ringGroup.add(s);
+              ringGroup.add(s.target);
+          }
+      } else {
+          // Standard Camera Ring
+          // Important: Camera Ring distance is usually tied to WD, but here we have a slider.
+          // We will respect the slider as an offset or absolute position?
+          // The slider says "Light Distance". For ring, this usually means WD. 
+          // Let's place it at camera position, but use the slider value for intensity calculation ref if we wanted,
+          // but better to just place it at the slider distance from object along camera axis.
+          
+          // Calculate position along camera vector
+          // Camera vector is from (0,camY,camZ) to (0,targetY,0)
+          const camVec = new THREE.Vector3(0, camY - targetY, camZ).normalize();
+          const ringPos = camVec.clone().multiplyScalar(dist).add(new THREE.Vector3(0, targetY, 0));
+          
+          ringGroup.position.copy(ringPos);
+          ringGroup.lookAt(targetVec);
+          group.add(ringGroup);
+          
+          const r = 45;
+          const torus = new THREE.Mesh(new THREE.TorusGeometry(r, 8, 8, 32), new THREE.MeshBasicMaterial({ color: colorHex }));
+          ringGroup.add(torus);
+
+          const count = 6;
+          for(let i=0; i<count; i++) {
+              const a = (i/count) * Math.PI * 2;
+              const sx = Math.cos(a) * r;
+              const sy = Math.sin(a) * r;
+              
+              const s = new THREE.SpotLight(colorHex, baseIntensity * SPOT_SCALE * 0.3);
+              s.position.set(sx, sy, 0);
+              s.target.position.set(sx * 0.8, sy * 0.8, 100); 
+              s.angle = 0.6;
+              s.penumbra = 0.5;
+              s.decay = 2;
+              s.distance = dist * 3;
+              configShadow(s);
+              ringGroup.add(s);
+              ringGroup.add(s.target);
+          }
+      }
+  }
+  else if (fixture === LightFixture.Bar) {
+      // --- BAR LIGHT ---
+      const len = 100;
+      const width = 20;
+
+      const addBarToGroup = (parent: THREE.Group, localPos: THREE.Vector3, rollRad: number) => {
+           const barWrapper = new THREE.Group();
+           barWrapper.position.copy(localPos);
+           barWrapper.lookAt(0,0,0); 
+           barWrapper.rotateZ(rollRad); 
+           parent.add(barWrapper);
+
+           // Visuals
+           const face = new THREE.Mesh(new THREE.PlaneGeometry(len, width), new THREE.MeshBasicMaterial({ color: colorHex }));
+           face.position.z = 1; 
+           barWrapper.add(face);
+           const box = new THREE.Mesh(new THREE.BoxGeometry(len+2, width+2, 5), new THREE.MeshBasicMaterial({ color: 0x333333 }));
+           box.position.z = -2;
+           barWrapper.add(box);
+
+           // Lights (Array of Spots to simulate bar)
+           // If we use RectAreaLight it would be better but shadows are tricky/expensive in older Three.js
+           // Sticking to Spots for robust shadows.
+           for(let k=-1; k<=1; k++) {
+              const s = new THREE.SpotLight(colorHex, baseIntensity * SPOT_SCALE * 0.3);
+              s.position.set(k * 30, 0, 2);
+              s.target.position.set(k * 30, 0, 100); 
+              s.angle = 0.9;
+              s.penumbra = 0.4;
+              s.decay = 2;
+              s.distance = dist * 4;
+              configShadow(s);
+              barWrapper.add(s);
+              barWrapper.add(s.target);
+           }
+      };
+
+      if (state.lightPosition === LightPosition.LowAngle) {
+          const fixtureGroup = new THREE.Group();
+          fixtureGroup.position.copy(targetVec); 
+          group.add(fixtureGroup);
+          
+          const radius = Math.max(dist, 80);
+          const configs = {
+              [LightConfig.Single]: [0],
+              [LightConfig.Dual]: [0, Math.PI],
+              [LightConfig.Quad]: [0, Math.PI/2, Math.PI, -Math.PI/2]
+          };
+          const angles = configs[state.lightConfig] || [0];
+
+          angles.forEach(ang => {
+              const x = Math.cos(ang) * radius;
+              const z = Math.sin(ang) * radius;
+              addBarToGroup(fixtureGroup, new THREE.Vector3(x, 0, z), 0);
+          });
+      } else {
+          // Standard: Top, Side, Back
+          let pos = new THREE.Vector3();
+          
+          if (state.lightPosition === LightPosition.Top) pos.set(0, dist, 0); 
+          else if (state.lightPosition === LightPosition.Side) pos.set(dist, 0, 0);
+          else if (state.lightPosition === LightPosition.Back) pos.set(0, 0, -dist);
+          
+          const objDim = OBJECT_DIMS[state.objectType];
+          if (state.lightPosition === LightPosition.Top) pos.y += objDim.h/2;
+          if (state.lightPosition === LightPosition.Side) pos.x += objDim.w/2;
+          if (state.lightPosition === LightPosition.Back) pos.z -= objDim.depth/2;
+
+          const absPos = pos.clone().add(targetVec);
+
+          const fixtureGroup = new THREE.Group();
+          fixtureGroup.position.copy(absPos);
+          fixtureGroup.lookAt(targetVec);
+          group.add(fixtureGroup);
+          
+          let baseRoll = 0; 
+          if (state.lightPosition === LightPosition.Side) baseRoll = Math.PI / 2;
+
+          if (state.lightConfig === LightConfig.Single) {
+             addBarToGroup(fixtureGroup, new THREE.Vector3(0,0,0), baseRoll);
+          }
+          else if (state.lightConfig === LightConfig.Dual) {
+             const offset = 60; 
+             addBarToGroup(fixtureGroup, new THREE.Vector3(offset, 0, 0), baseRoll);
+             addBarToGroup(fixtureGroup, new THREE.Vector3(-offset, 0, 0), baseRoll);
+          }
+          else if (state.lightConfig === LightConfig.Quad) {
+             const offset = 70;
+             addBarToGroup(fixtureGroup, new THREE.Vector3(offset, offset, 0), baseRoll);
+             addBarToGroup(fixtureGroup, new THREE.Vector3(-offset, offset, 0), baseRoll);
+             addBarToGroup(fixtureGroup, new THREE.Vector3(offset, -offset, 0), baseRoll);
+             addBarToGroup(fixtureGroup, new THREE.Vector3(-offset, -offset, 0), baseRoll);
+          }
+      }
+  }
+
 }
 
 export default SimulatedImage;

@@ -9,12 +9,13 @@ import {
   SimulationState,
   ViewFocus,
   ObjectOrientation,
-  Language
+  Language,
+  GlobalEnv
 } from '../types';
 import { STANDARD_FOCAL_LENGTHS, STANDARD_APERTURES, OBJECT_GOALS } from '../constants';
 import { TEXTS, GOAL_TRANSLATIONS } from '../translations';
 import { getPreset } from '../presets';
-import { Camera, Lightbulb, Box, Activity, Target, RotateCw, Wind, Palette, Scan, Signal, Eye, Move3d, Wand2 } from 'lucide-react';
+import { Camera, Lightbulb, Box, Activity, Target, RotateCw, Wind, Palette, Scan, Signal, Eye, Move3d, Wand2, Sun } from 'lucide-react';
 
 interface ControlPanelProps {
   state: SimulationState;
@@ -39,15 +40,25 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
 
   // Logic to ensure valid defaults when switching Light Types
   useEffect(() => {
+    // Force specific positions for Dome/Tunnel
+    if (state.lightType === LightFixture.Dome || state.lightType === LightFixture.Tunnel) {
+        if (state.lightPosition !== LightPosition.Surrounding) {
+             handleChange('lightPosition', LightPosition.Surrounding);
+        }
+    }
     // If Panel selected, but position is Camera Axis (invalid), force to Backlight
-    if (state.lightType === LightFixture.Panel) {
+    else if (state.lightType === LightFixture.Panel) {
         if (state.lightPosition !== LightPosition.Back && state.lightPosition !== LightPosition.Top && state.lightPosition !== LightPosition.Side) {
              handleChange('lightPosition', LightPosition.Back);
         }
     }
     // If Coaxial, force Camera Axis
-    if (state.lightType === LightFixture.Coaxial && state.lightPosition !== LightPosition.Camera) {
+    else if (state.lightType === LightFixture.Coaxial && state.lightPosition !== LightPosition.Camera) {
          handleChange('lightPosition', LightPosition.Camera);
+    }
+    // If Ring, remove Backlight/Top option if selected
+    else if (state.lightType === LightFixture.Ring && (state.lightPosition === LightPosition.Back || state.lightPosition === LightPosition.Top)) {
+        handleChange('lightPosition', LightPosition.Camera);
     }
   }, [state.lightType]);
 
@@ -76,14 +87,17 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
           case LightFixture.Panel: 
             return [LightPosition.Back, LightPosition.Top, LightPosition.Side];
           case LightFixture.Ring:
+            // Standard Ring is on Camera Axis. Low Angle Ring (Dark Field) is different.
             return [LightPosition.Camera, LightPosition.LowAngle];
           case LightFixture.Bar:
-            // Added Backlight support to match Panel capabilities
             return [LightPosition.Back, LightPosition.Top, LightPosition.Side, LightPosition.LowAngle];
           case LightFixture.Coaxial:
             return [LightPosition.Camera];
           case LightFixture.Spot:
             return [LightPosition.Top, LightPosition.Side];
+          case LightFixture.Dome:
+          case LightFixture.Tunnel:
+            return [LightPosition.Surrounding];
           default:
             return Object.values(LightPosition);
       }
@@ -97,10 +111,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
               return [LightConfig.Single, LightConfig.Dual, LightConfig.Quad];
           case LightFixture.Spot:
               return [LightConfig.Narrow, LightConfig.Wide];
-          case LightFixture.Ring:
-              return [LightConfig.Single]; // Standard
-          case LightFixture.Coaxial:
-              return [LightConfig.Single];
           default:
               return [LightConfig.Single];
       }
@@ -157,6 +167,37 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
            <div className="flex items-center gap-2 text-slate-300 font-medium">
             <Wind size={16} /> {t.sectionEnv}
           </div>
+
+          <div className="space-y-1">
+             <label className="text-xs text-slate-500 flex items-center gap-1">
+                <Sun size={10} /> {t.globalEnv}
+             </label>
+             <select 
+              className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 focus:ring-2 focus:ring-yellow-500 outline-none"
+              value={state.globalEnv}
+              onChange={(e) => handleChange('globalEnv', e.target.value)}
+            >
+              {Object.values(GlobalEnv).map((env) => (
+                <option key={env} value={env}>{t.envs?.[env] || env}</option>
+              ))}
+            </select>
+          </div>
+
+          {state.globalEnv !== GlobalEnv.Studio && (
+             <div className="space-y-1 animate-in fade-in slide-in-from-top-2">
+               <label className="text-xs text-slate-500">{t.globalIntensity} ({state.globalIntensity}%)</label>
+               <input 
+                 type="range" 
+                 min="0" 
+                 max="100" 
+                 value={state.globalIntensity}
+                 onChange={(e) => handleChange('globalIntensity', Number(e.target.value))}
+                 className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+               />
+            </div>
+          )}
+
+          <hr className="border-slate-800" />
 
           <div className="space-y-1">
              <label className="text-xs text-slate-500 flex items-center gap-1">
@@ -222,16 +263,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
                />
              </div>
           </div>
-
-          {/* 
-          <button
-            onClick={handleAutoTune}
-            className="w-full mt-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold py-3 px-3 rounded flex items-center justify-center gap-2 shadow-md transition-all border border-white/10 ring-1 ring-white/20"
-            title={t.autoTuneDesc}
-          >
-            <Wand2 size={16} /> {t.autoTune}
-          </button>
-          */}
         </section>
 
         {/* 3. View & Orientation */}
@@ -397,6 +428,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
                     else if(newType === LightFixture.Coaxial) newPos = LightPosition.Camera;
                     else if(newType === LightFixture.Bar) newPos = LightPosition.Top;
                     else if(newType === LightFixture.Ring) newPos = LightPosition.Camera;
+                    else if(newType === LightFixture.Dome || newType === LightFixture.Tunnel) newPos = LightPosition.Surrounding;
                     
                     onChange({ 
                         lightType: newType, 

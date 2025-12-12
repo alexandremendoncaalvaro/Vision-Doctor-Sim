@@ -9,7 +9,8 @@ import {
   ObjectType,
   OpticalMetrics,
   ValidationResult,
-  Language
+  Language,
+  GlobalEnv
 } from './types';
 import { SENSOR_SPECS, OBJECT_DIMS, OBJECT_GOALS } from './constants';
 import ControlPanel from './components/ControlPanel';
@@ -41,6 +42,11 @@ const App: React.FC = () => {
     lightDistance: 200,
     lightColor: LightColor.White,
     lightIntensity: 60,
+    
+    // New Global Environment States
+    globalEnv: GlobalEnv.Studio,
+    globalIntensity: 0,
+
     exposureTime: 5000,
     gain: 0,
     // New Fields
@@ -84,7 +90,11 @@ const App: React.FC = () => {
     // Calc Exposure Value (Simplistic brightness ratio)
     // Base: 5000us, f/2.8, 0dB gain = 1.0
     const gainFactor = Math.pow(10, state.gain / 20); // Linearize dB
-    const exposureValue = (state.exposureTime / 5000) * (Math.pow(2.8, 2) / Math.pow(state.aperture, 2)) * gainFactor;
+    
+    // Account for global light in exposure estimate roughly (simplified)
+    const globalLightAdd = (state.globalIntensity / 100) * 0.5;
+    
+    const exposureValue = (state.exposureTime / 5000) * (Math.pow(2.8, 2) / Math.pow(state.aperture, 2)) * gainFactor * (1 + globalLightAdd);
 
     return {
       fovWidth,

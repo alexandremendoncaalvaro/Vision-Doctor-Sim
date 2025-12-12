@@ -19,21 +19,29 @@ export enum LightColor {
 }
 
 export enum LightFixture {
-  Ring = "Ring",
-  Bar = "Bar",
-  Spot = "Spot",
-  Panel = "Panel",
-  Coaxial = "Coaxial"
+  Ring = "Ring Light",
+  Bar = "Bar Light",
+  Spot = "Spot Light",
+  Panel = "Backlight Panel",
+  Coaxial = "Coaxial",
+  Dome = "Dome (Cloudy Day)",
+  Tunnel = "Tunnel (Flat Dome)"
+}
+
+export enum GlobalEnv {
+  Studio = "Studio (Dark Box)",
+  Factory = "Factory Floor",
+  Sunlight = "Direct Sunlight"
 }
 
 // Simplified positions that make sense per fixture
 export enum LightPosition {
-  Camera = "Camera Axis",
-  Back = "Backlight", // Behind object
-  Top = "Top",        // Above object
-  Side = "Side",      // From one side
-  LowAngle = "Low Angle", // Grazing
-  Multi = "Multi-Angle" // For 4-bar setups
+  Camera = "Camera Axis (Bright Field)",
+  Back = "Backlight (Silhouette)",
+  Top = "Top (Direct)",
+  Side = "Side (Oblique)",
+  LowAngle = "Low Angle (Dark Field)",
+  Surrounding = "Surrounding (Diffuse)" // For Dome/Tunnel
 }
 
 export enum LightConfig {
@@ -83,6 +91,10 @@ export interface SimulationState {
   lightColor: LightColor;
   lightIntensity: number; // 0-100
   
+  // Global Environment
+  globalEnv: GlobalEnv;
+  globalIntensity: number; // 0-100
+
   // Camera Settings
   exposureTime: number; // microseconds
   gain: number; // dB
