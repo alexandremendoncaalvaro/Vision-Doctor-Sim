@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { SimulationState, OpticalMetrics, LightColor, LightFixture, LightPosition, LightConfig, ObjectType, Language, GlobalEnv, BackgroundPattern } from '../types';
+import { SimulationState, OpticalMetrics, LightColor, LightFixture, LightPosition, LightConfig, ObjectType, Language, GlobalEnv, BackgroundPattern, LensFilter } from '../types';
 import { OBJECT_DIMS } from '../constants';
 import { TEXTS } from '../translations';
 
@@ -261,11 +261,19 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
        const timeFactor = state.exposureTime / 5000;
        const apertureFactor = Math.pow(2.8, 2) / Math.pow(state.aperture, 2);
        const gainFactor = Math.pow(10, state.gain / 20);
-       const calculatedExposure = baseExposure * timeFactor * apertureFactor * gainFactor;
+       
+       // Filter Loss Factors
+       // Polarizer usually cuts 1.5 - 2 stops. We'll approximate as 60% light loss (factor 0.4)
+       // Color filters also cut light.
+       let filterFactor = 1.0;
+       if (state.lensFilter === LensFilter.Polarizer) filterFactor = 0.4;
+       else if (state.lensFilter !== LensFilter.None) filterFactor = 0.8;
+
+       const calculatedExposure = baseExposure * timeFactor * apertureFactor * gainFactor * filterFactor;
        
        rendererRef.current.toneMappingExposure = calculatedExposure;
     }
-  }, [state.exposureTime, state.aperture, state.gain]);
+  }, [state.exposureTime, state.aperture, state.gain, state.lensFilter]);
 
   useEffect(() => {
     if (!sceneRef.current || !lightsGroupRef.current || !objectGroupRef.current || !camModelRef.current || !cameraRef.current) return;
@@ -273,15 +281,24 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     // --- GLOBAL ENVIRONMENT UPDATE ---
     const scene = sceneRef.current;
     
-    if (state.globalEnv === GlobalEnv.Studio) {
-        // Studio Box: Use the light calculation to determine reflections/bounces
-        scene.environment = null;
-        scene.environmentIntensity = 0;
+    // Calculate Base Environmental intensity
+    let envIntensity = 0;
+    if (state.globalEnv !== GlobalEnv.Studio) {
+       scene.environment = envMapRef.current;
+       envIntensity = (state.globalIntensity / 100) * 1.5;
     } else {
-        // Factory / Sunlight: Use RoomEnv for reflections
-        scene.environment = envMapRef.current;
-        scene.environmentIntensity = (state.globalIntensity / 100) * 1.5; 
+       scene.environment = null;
+       envIntensity = 0;
     }
+
+    // --- POLARIZER EFFECT ON REFLECTIONS ---
+    // A CPL filter significantly reduces reflections from non-metallic surfaces.
+    // In our simplified model, we simulate this by crushing the environment intensity.
+    if (state.lensFilter === LensFilter.Polarizer) {
+        envIntensity *= 0.1; // 90% reduction in glare/reflections
+    }
+    
+    scene.environmentIntensity = envIntensity;
 
     const objectHeight = OBJECT_DIMS[state.objectType].h;
     
@@ -340,6 +357,17 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     height: `${state.roiH * 100}%`,
   };
 
+  // Determine Overlay Color for Lens Filter
+  const filterOverlayColor = useMemo(() => {
+      if (viewType === 'free') return null; // Only apply to camera view
+      switch (state.lensFilter) {
+          case LensFilter.Red: return 'rgb(255, 0, 0)';
+          case LensFilter.Blue: return 'rgb(0, 0, 255)';
+          case LensFilter.Green: return 'rgb(0, 255, 0)';
+          default: return null;
+      }
+  }, [state.lensFilter, viewType]);
+
   const currentStdDev = useMemo(() => {
      const lin = metrics.linearBlurPx;
      const vib = metrics.vibrationBlurPx;
@@ -365,6 +393,14 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
         className="w-full h-full transition duration-100" 
         style={blurStyle}
       />
+
+      {/* FILTER OVERLAY (Multiply Blend) */}
+      {filterOverlayColor && (
+          <div 
+            className="absolute inset-0 pointer-events-none mix-blend-multiply z-10"
+            style={{ backgroundColor: filterOverlayColor }}
+          />
+      )}
 
       {viewType === 'camera' && noiseOpacity > 0 && (
          <div 

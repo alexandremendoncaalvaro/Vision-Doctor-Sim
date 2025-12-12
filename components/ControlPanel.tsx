@@ -11,12 +11,13 @@ import {
   ObjectOrientation,
   Language,
   GlobalEnv,
-  BackgroundPattern
+  BackgroundPattern,
+  LensFilter
 } from '../types';
 import { STANDARD_FOCAL_LENGTHS, STANDARD_APERTURES, OBJECT_GOALS } from '../constants';
 import { TEXTS, GOAL_TRANSLATIONS } from '../translations';
 import { getPreset } from '../presets';
-import { Camera, Lightbulb, Box, Activity, Target, RotateCw, Wind, Palette, Scan, Signal, Eye, Move3d, Wand2, Sun, Zap, Move, Factory, Grip } from 'lucide-react';
+import { Camera, Lightbulb, Box, Activity, Target, RotateCw, Wind, Palette, Scan, Signal, Eye, Move3d, Wand2, Sun, Zap, Move, Factory, Grip, Disc } from 'lucide-react';
 
 interface ControlPanelProps {
   state: SimulationState;
@@ -432,6 +433,19 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, language }
             >
               {STANDARD_APERTURES.map((a) => (
                 <option key={a} value={a}>f/{a}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+             <label className="text-xs text-slate-500 flex items-center gap-1"><Disc size={10} /> {t.lensFilter}</label>
+             <select 
+              className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200"
+              value={state.lensFilter}
+              onChange={(e) => handleChange('lensFilter', e.target.value)}
+            >
+              {Object.values(LensFilter).map((f) => (
+                <option key={f} value={f}>{t.filters[f] || f}</option>
               ))}
             </select>
           </div>

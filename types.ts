@@ -76,6 +76,14 @@ export enum BackgroundPattern {
   Level3 = "Level 3 (High)"
 }
 
+export enum LensFilter {
+  None = "None",
+  Polarizer = "Polarizer (CPL)",
+  Red = "Red Bandpass (630nm)",
+  Blue = "Blue Bandpass (470nm)",
+  Green = "Green Bandpass (525nm)"
+}
+
 export interface SimulationState {
   // Optics
   sensorFormat: SensorFormat;
@@ -83,6 +91,7 @@ export interface SimulationState {
   aperture: number; // f-stop
   workingDistance: number; // mm
   cameraAngle: number; // degrees
+  lensFilter: LensFilter; // New Property
   
   // Scene
   objectType: ObjectType;
@@ -142,10 +151,13 @@ export interface OpticalMetrics {
 
 export interface ValidationResult {
   roi: 'good' | 'acceptable' | 'poor';
+  resolution: 'good' | 'acceptable' | 'poor'; // New: Pixel Density
+  focus: 'good' | 'shallow' | 'poor'; // New: Depth of Field
   contrast: 'good' | 'poor';
   stability: 'good' | 'acceptable' | 'poor';
   exposure: 'good' | 'dark' | 'bright';
-  technique: 'good' | 'acceptable' | 'poor' | 'wrong_geometry'; // New check for lighting logic
+  glare: 'none' | 'warning'; // New: Polarizer/Reflection check
+  technique: 'good' | 'acceptable' | 'poor' | 'wrong_geometry'; 
 }
 
 export interface DoctorAdvice {

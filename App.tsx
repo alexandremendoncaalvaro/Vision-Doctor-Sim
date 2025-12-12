@@ -11,7 +11,8 @@ import {
   ValidationResult,
   Language,
   GlobalEnv,
-  BackgroundPattern
+  BackgroundPattern,
+  LensFilter
 } from './types';
 import { SENSOR_SPECS, OBJECT_DIMS, OBJECT_GOALS } from './constants';
 import ControlPanel from './components/ControlPanel';
@@ -31,6 +32,7 @@ const App: React.FC = () => {
     aperture: 2.8,
     workingDistance: 300,
     cameraAngle: 0,
+    lensFilter: LensFilter.None, // Default Filter
     objectType: ObjectType.PCB,
     // Initialize with first available goal for PCB
     inspectionGoal: OBJECT_GOALS[ObjectType.PCB][0], 
@@ -108,7 +110,12 @@ const App: React.FC = () => {
     // Intensity factor now includes multiplier
     const lightFactor = (state.lightIntensity / 60) * (state.lightMultiplier || 1);
 
-    const exposureValue = (state.exposureTime / 5000) * (Math.pow(2.8, 2) / Math.pow(state.aperture, 2)) * gainFactor * (1 + globalLightAdd) * lightFactor;
+    // Filter Transmission Loss Factor
+    let filterFactor = 1.0;
+    if (state.lensFilter === LensFilter.Polarizer) filterFactor = 0.4; // ~1.5 stops loss
+    else if (state.lensFilter !== LensFilter.None) filterFactor = 0.8; // Color filters lose some light
+
+    const exposureValue = (state.exposureTime / 5000) * (Math.pow(2.8, 2) / Math.pow(state.aperture, 2)) * gainFactor * (1 + globalLightAdd) * lightFactor * filterFactor;
 
     return {
       fovWidth,
@@ -127,9 +134,12 @@ const App: React.FC = () => {
   const validation = useMemo<ValidationResult>(() => {
     const res: ValidationResult = {
       roi: 'good',
+      resolution: 'good',
+      focus: 'good',
       contrast: 'good',
       stability: 'good',
       exposure: 'good',
+      glare: 'none',
       technique: 'good'
     };
 
@@ -153,20 +163,60 @@ const App: React.FC = () => {
        }
     }
 
-    // 2. Stability Check (Based on calculated blur)
+    // 2. Resolution Check (NEW) - Based on Goal (Pixels per mm)
+    // OCR needs high density. Presence needs low.
+    const density = metrics.pixelDensity;
+    let reqDensity = 2; // Default (Presence)
+    
+    if (state.inspectionGoal.includes('OCR') || state.inspectionGoal.includes('Text') || state.inspectionGoal.includes('Code')) {
+        reqDensity = 10; // High
+    } else if (state.inspectionGoal.includes('Dimensions') || state.inspectionGoal.includes('Integrity') || state.inspectionGoal.includes('Bridges')) {
+        reqDensity = 6; // Medium
+    }
+
+    if (density < reqDensity) res.resolution = 'poor';
+    else if (density < reqDensity * 1.5) res.resolution = 'acceptable';
+    else res.resolution = 'good';
+
+
+    // 3. Focus Check (NEW) - Depth of Field vs Object Depth
+    const depth = objDim.depth;
+    const dof = metrics.dof;
+    // If viewing 'Whole' object, we need at least 50% of object depth in focus (heuristic)
+    // If viewing 'Top', we need much less.
+    let requiredDof = depth * 0.5;
+    if (state.viewFocus === 'Top' || state.viewFocus === 'Bottom') requiredDof = 5; // Just the surface
+    
+    if (dof < requiredDof) res.focus = 'shallow';
+    else if (dof > requiredDof * 5) res.focus = 'good'; // Deep focus
+    
+    // 4. Glare Check (NEW) - Material + Light + Filter
+    const isShiny = state.objectType === ObjectType.GlassBottle || state.objectType === ObjectType.AluminumCan || state.objectType === ObjectType.BottleCap;
+    const isDirectLight = 
+        state.lightType === LightFixture.Ring || 
+        state.lightType === LightFixture.Bar || 
+        state.lightType === LightFixture.Spot ||
+        state.lightType === LightFixture.Coaxial;
+    
+    if (isShiny && isDirectLight && state.lightPosition === LightPosition.Camera && state.lensFilter !== LensFilter.Polarizer) {
+        res.glare = 'warning';
+    }
+
+
+    // 5. Stability Check (Based on calculated blur)
     if (metrics.motionBlurPx > 6) {
       res.stability = 'poor';
     } else if (metrics.motionBlurPx > 1) {
       res.stability = 'acceptable';
     }
 
-    // 3. Exposure Check
+    // 6. Exposure Check
     // Adjust thresholds for exposure check to be more lenient with high power
     if (metrics.exposureValue < 0.25) res.exposure = 'dark';
     else if (metrics.exposureValue > 8.0) res.exposure = 'bright';
     else if (metrics.exposureValue < 0.5 || metrics.exposureValue > 4.0) res.exposure = 'good'; 
     
-    // 4. Contrast Check (Simulated)
+    // 7. Contrast Check (Simulated)
     const bg = state.backgroundColor;
     const pattern = state.backgroundPattern;
     const obj = state.objectType;
@@ -192,7 +242,7 @@ const App: React.FC = () => {
         if (obj === ObjectType.GlassBottle) res.contrast = 'poor';
     }
 
-    // 5. Technique & Geometry Check
+    // 8. Technique & Geometry Check
     // A. Blocking View Check
     // If Position is Camera Axis, only Ring and Coaxial are physically valid without blocking view.
     if (state.lightPosition === LightPosition.Camera) {
@@ -238,6 +288,7 @@ const App: React.FC = () => {
   const getStatusIcon = (status: string) => {
     if (status === 'good') return <CheckCircle size={16} className="text-emerald-500" />;
     if (status === 'acceptable') return <AlertTriangle size={16} className="text-yellow-500" />;
+    if (status === 'none') return <CheckCircle size={16} className="text-emerald-500" />;
     return <XCircle size={16} className="text-red-500" />;
   };
 
@@ -248,6 +299,9 @@ const App: React.FC = () => {
           case 'poor': return t.valPoor;
           case 'dark': return t.valDark;
           case 'bright': return t.valBright;
+          case 'shallow': return t.valShallow;
+          case 'warning': return t.valWarning;
+          case 'none': return t.valGood; // Glare 'none' is good
           case 'wrong_geometry': return t.valWrongGeo;
           case 'wrong_technique': return t.valWrongTech;
           default: return val;
@@ -347,6 +401,24 @@ const App: React.FC = () => {
                       <span className="text-slate-300">{t.valFraming}</span>
                       <div className="flex items-center gap-1 capitalize text-xs">
                         {getStatusIcon(validation.roi)} {getTranslatedValidation(validation.roi)}
+                      </div>
+                   </div>
+                   <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-300">{t.valResolution}</span>
+                      <div className="flex items-center gap-1 capitalize text-xs">
+                        {getStatusIcon(validation.resolution)} {getTranslatedValidation(validation.resolution)}
+                      </div>
+                   </div>
+                   <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-300">{t.valFocus}</span>
+                      <div className="flex items-center gap-1 capitalize text-xs">
+                        {validation.focus === 'good' ? getStatusIcon('good') : getStatusIcon('poor')} {getTranslatedValidation(validation.focus)}
+                      </div>
+                   </div>
+                   <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-300">{t.valGlare}</span>
+                      <div className="flex items-center gap-1 capitalize text-xs">
+                        {validation.glare === 'none' ? getStatusIcon('good') : getStatusIcon('poor')} {getTranslatedValidation(validation.glare)}
                       </div>
                    </div>
                    <div className="flex items-center justify-between gap-4">
