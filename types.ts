@@ -31,6 +31,9 @@ export enum ObjectType {
   BottleCap = "Bottle Cap"
 }
 
+export type ViewFocus = 'Top' | 'Middle' | 'Bottom' | 'Whole';
+export type ObjectOrientation = 'Front' | 'Side' | 'Back' | 'Top' | 'Bottom';
+
 export interface SimulationState {
   // Optics
   sensorFormat: SensorFormat;
@@ -41,6 +44,10 @@ export interface SimulationState {
   
   // Scene
   objectType: ObjectType;
+  inspectionGoal: string; // Specific goal
+  viewFocus: ViewFocus;
+  objectOrientation: ObjectOrientation;
+
   lightType: LightType;
   lightColor: LightColor;
   lightIntensity: number; // 0-100

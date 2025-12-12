@@ -21,8 +21,13 @@ export const analyzeSetup = async (
     You are an expert Machine Vision Engineer ("Vision Doctor"). 
     Analyze the following optical setup for industrial inspection.
     
-    Current Setup:
+    Target Application:
     - Object: ${state.objectType}
+    - Specific Goal: ${state.inspectionGoal}
+    - Object Orientation: ${state.objectOrientation}
+    - Camera View: Focusing on ${state.viewFocus}
+    
+    Current Setup:
     - Sensor: ${state.sensorFormat}
     - Focal Length: ${state.focalLength}mm
     - Aperture: f/${state.aperture}
@@ -35,10 +40,10 @@ export const analyzeSetup = async (
     - Depth of Field: ${metrics.dof.toFixed(2)} mm
     
     Task:
-    Provide a critique of this setup. 
-    1. Is the lens suitable for the object size? (Is the object fully visible or too small?)
-    2. Is the lighting type and color appropriate for the material (PCB, Metal, Plastic)?
-    3. Is the Depth of Field sufficient?
+    Provide a critique of this setup specifically for the goal: "${state.inspectionGoal}".
+    1. Is the resolution/magnification sufficient for this specific goal?
+    2. Is the lighting type and color appropriate for the material and defect type? (e.g. Low angle for scratches, Backlight for dimensions/fill level).
+    3. Is the view angle correct? (e.g. Top view for caps, Side view for labels).
     4. Give a suitability score (0-100).
   `;
 

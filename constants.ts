@@ -22,12 +22,40 @@ export const OBJECT_DIMS: Record<ObjectType, { w: number; h: number, depth: numb
   [ObjectType.BottleCap]: { w: 28, h: 28, depth: 6 },
 };
 
-export const OBJECT_GOALS: Record<ObjectType, string> = {
-  [ObjectType.PCB]: "Goal: Inspect solder bridges and read laser-etched component text.",
-  [ObjectType.GlassBottle]: "Goal: Inspect fill level and contour. Manage specular reflections on glass.",
-  [ObjectType.AluminumCan]: "Goal: Inspect printed codes on curved metal. Avoid hotspots and glare.",
-  [ObjectType.MatteBlock]: "Goal: Calibrate geometry and contrast without specular distractions.",
-  [ObjectType.BottleCap]: "Goal: Inspect ridges and logo. Use Low Angle light to reveal texture."
+export const OBJECT_GOALS: Record<ObjectType, string[]> = {
+  [ObjectType.PCB]: [
+    "Check Solder Bridges (Shorts)",
+    "Verify Component Presence",
+    "Read Laser Etched Text (OCR)",
+    "Check Polarity Marks",
+    "Inspect Conformal Coating"
+  ],
+  [ObjectType.GlassBottle]: [
+    "Inspect Fill Level",
+    "Check Cap Seal / Tamper Band",
+    "Read Label Text / Date Code",
+    "Detect Glass Cracks / Inclusions",
+    "Verify Label Alignment"
+  ],
+  [ObjectType.AluminumCan]: [
+    "Read Bottom Dot Peen Code",
+    "Inspect Pull Tab Integrity",
+    "Verify Print Quality / Color",
+    "Detect Dents or Scratches",
+    "Check Lid Sealing"
+  ],
+  [ObjectType.MatteBlock]: [
+    "Measure Dimensions (Metrology)",
+    "Check Surface Flatness",
+    "Detect Surface Flaws",
+    "Calibrate Robot Coordinate System"
+  ],
+  [ObjectType.BottleCap]: [
+    "Inspect Liner Seal Integrity",
+    "Verify Logo Print Quality",
+    "Check for Deformed Criminp",
+    "Read Top Print Code"
+  ]
 };
 
 export const DEFAULT_ADVICE = "Adjust parameters to inspect the object. Click 'Analyze Setup' for AI feedback.";

@@ -9,7 +9,7 @@ import {
   DoctorAdvice,
   ValidationResult
 } from './types';
-import { SENSOR_SPECS, OBJECT_DIMS } from './constants';
+import { SENSOR_SPECS, OBJECT_DIMS, OBJECT_GOALS } from './constants';
 import { analyzeSetup } from './services/geminiService';
 import ControlPanel from './components/ControlPanel';
 import SchematicView from './components/SchematicView';
@@ -25,6 +25,11 @@ const App: React.FC = () => {
     workingDistance: 300,
     cameraAngle: 0,
     objectType: ObjectType.PCB,
+    // Initialize with first available goal for PCB
+    inspectionGoal: OBJECT_GOALS[ObjectType.PCB][0], 
+    viewFocus: 'Middle',
+    objectOrientation: 'Front',
+    
     lightType: LightType.RingLight,
     lightColor: LightColor.White,
     lightIntensity: 60,

@@ -191,27 +191,47 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     }
   }, [state.exposureTime, state.aperture, state.gain]);
 
-  // 3. Scene Objects & Lights Update
+  // 3. Scene Objects & Lights & Camera Pose Update
   useEffect(() => {
     if (!sceneRef.current || !lightsGroupRef.current || !objectGroupRef.current || !camModelRef.current || !cameraRef.current) return;
 
+    const objectHeight = OBJECT_DIMS[state.objectType].h;
+    
+    // Calculate Target Y based on Focus
+    let targetY = 0;
+    if (state.viewFocus === 'Top') targetY = objectHeight * 0.45; // slightly below absolute top
+    else if (state.viewFocus === 'Bottom') targetY = -objectHeight * 0.45;
+    else if (state.viewFocus === 'Middle') targetY = 0;
+    else if (state.viewFocus === 'Whole') targetY = 0;
+
     const angleRad = (state.cameraAngle * Math.PI) / 180;
-    const camY = state.workingDistance * Math.sin(angleRad);
+    
+    // Camera is positioned relative to the Target
+    // If we look at the top, the camera moves up.
+    // CamY = TargetY + WD * sin(angle)
+    // CamZ = TargetZ + WD * cos(angle)
+    
+    const camY = targetY + (state.workingDistance * Math.sin(angleRad));
     const camZ = state.workingDistance * Math.cos(angleRad);
     
     cameraRef.current.position.set(0, camY, camZ);
-    cameraRef.current.lookAt(0, 0, 0);
+    cameraRef.current.lookAt(0, targetY, 0);
 
     const fovDeg = 2 * Math.atan((metrics.fovHeight / 2) / state.workingDistance) * (180 / Math.PI);
     cameraRef.current.fov = fovDeg;
     cameraRef.current.updateProjectionMatrix();
 
+    // Move Camera Model visual to match
     camModelRef.current.position.set(0, camY, camZ);
-    camModelRef.current.lookAt(0, 0, 0);
+    camModelRef.current.lookAt(0, targetY, 0);
     camModelRef.current.visible = viewType === 'free'; 
 
-    updateObject(objectGroupRef.current, state.objectType);
-    updateLights(lightsGroupRef.current, state, camY, camZ);
+    updateObject(objectGroupRef.current, state.objectType, state.objectOrientation);
+    
+    // Lights typically move with the camera (Ring/Coax) or stay fixed relative to world center (Backlight)
+    // We pass camY/camZ which are the camera coordinates.
+    // However, if we move the camera up to inspect the Top, the Ring Light should follow.
+    updateLights(lightsGroupRef.current, state, camY, camZ, targetY);
 
   }, [state, metrics, viewType]);
 
@@ -275,6 +295,9 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
           <span>EXP:</span> <span className="text-slate-200 text-right">{(state.exposureTime/1000).toFixed(1)}ms</span>
           <span>GAIN:</span> <span className="text-slate-200 text-right">{rendererRef.current?.toneMappingExposure.toFixed(1) || '1.0'}</span>
           <span>FPS:</span> <span className="text-slate-200 text-right">{Math.min(1000000/state.exposureTime, 60).toFixed(0)}</span>
+        </div>
+        <div className="mt-2 text-slate-500 border-t border-slate-700 pt-1">
+           {state.inspectionGoal}
         </div>
       </div>
     </div>
@@ -425,7 +448,8 @@ function createCrownCapTexture(color: string): THREE.Texture {
     return tex;
 }
 
-function updateObject(group: THREE.Group, type: ObjectType) {
+function updateObject(group: THREE.Group, type: ObjectType, orientation: string) {
+  // Clear previous
   while(group.children.length > 0){ 
     const child = group.children[0];
     group.remove(child);
@@ -435,6 +459,16 @@ function updateObject(group: THREE.Group, type: ObjectType) {
         else (child as any).material.dispose();
     }
   }
+
+  // Set Rotation based on Orientation Presets
+  // Default (Front) is 0,0,0
+  group.rotation.set(0,0,0);
+  
+  if (orientation === 'Side') group.rotation.y = -Math.PI / 2;
+  else if (orientation === 'Back') group.rotation.y = Math.PI;
+  else if (orientation === 'Top') group.rotation.x = Math.PI / 2; // Lie down
+  else if (orientation === 'Bottom') group.rotation.x = -Math.PI / 2;
+
   const dim = OBJECT_DIMS[type];
 
   if (type === ObjectType.PCB) {
@@ -472,29 +506,28 @@ function updateObject(group: THREE.Group, type: ObjectType) {
       points.push(new THREE.Vector2(r * 0.7, 0));
       points.push(new THREE.Vector2(r * 0.95, r * 0.25)); 
       points.push(new THREE.Vector2(r, h * 0.55));
-      points.push(new THREE.Vector2(r * 0.35, h * 0.75)); // Shoulder
-      points.push(new THREE.Vector2(r * 0.32, h * 0.95)); // Neck
-      points.push(new THREE.Vector2(r * 0.4, h * 0.96)); // Finish Ring
+      points.push(new THREE.Vector2(r * 0.35, h * 0.75)); 
+      points.push(new THREE.Vector2(r * 0.32, h * 0.95)); 
+      points.push(new THREE.Vector2(r * 0.4, h * 0.96)); 
       points.push(new THREE.Vector2(r * 0.4, h * 0.99)); 
       points.push(new THREE.Vector2(r * 0.32, h)); 
       points.push(new THREE.Vector2(0, h));
 
       const glassGeo = new THREE.LatheGeometry(points, 64);
       const glassMat = new THREE.MeshPhysicalMaterial({
-          color: 0x8a4b00, // Amber
+          color: 0x8a4b00, 
           transmission: 0.98,
           opacity: 1,
           metalness: 0.0,
-          roughness: 0.05, // Very Smooth
+          roughness: 0.05, 
           ior: 1.5,
-          thickness: 3.0, // Thick glass
-          attenuationColor: new THREE.Color('#3f2105'), // Absorb darker amber
-          attenuationDistance: 25.0, // Darkens as it gets thicker
+          thickness: 3.0, 
+          attenuationColor: new THREE.Color('#3f2105'), 
+          attenuationDistance: 25.0, 
           side: THREE.DoubleSide
       });
       const bottle = new THREE.Mesh(glassGeo, glassMat);
       
-      // Liquid Inside
       const liqPoints = points.slice(0, 5).map(p => new THREE.Vector2(p.x * 0.88, p.y < h*0.7 ? p.y + 2 : h*0.7));
       const liqGeo = new THREE.LatheGeometry(liqPoints, 32);
       const liqMat = new THREE.MeshStandardMaterial({ 
@@ -503,7 +536,6 @@ function updateObject(group: THREE.Group, type: ObjectType) {
       });
       const liquid = new THREE.Mesh(liqGeo, liqMat);
 
-      // Label
       const labelGeo = new THREE.CylinderGeometry(r + 0.1, r + 0.1, h * 0.3, 64, 1, true);
       const labelMat = new THREE.MeshStandardMaterial({ 
           map: createBeerLabelTexture("SimulBrew", "Premium Lager", 25), 
@@ -515,7 +547,6 @@ function updateObject(group: THREE.Group, type: ObjectType) {
       label.position.y = h * 0.35;
       label.rotation.y = -Math.PI / 2;
 
-      // Realistic Crown Cap
       const capGroup = createRealisticCrownCap(r * 0.35);
       capGroup.position.y = h;
       
@@ -532,11 +563,10 @@ function updateObject(group: THREE.Group, type: ObjectType) {
       const h = dim.h;
       const r = dim.w / 2;
       
-      // Body Material
       const aluMat = new THREE.MeshStandardMaterial({
            color: 0xffffff,
            map: createBeerLabelTexture("RoboHops", "Neural IPA", 200),
-           metalness: 0.7, // Higher metalness for sheen
+           metalness: 0.7, 
            roughness: 0.25,
            envMapIntensity: 1.2
       });
@@ -552,7 +582,6 @@ function updateObject(group: THREE.Group, type: ObjectType) {
       const body = new THREE.Mesh(bodyGeo, aluMat);
       body.rotation.y = -Math.PI/2;
       
-      // Tapers
       const taperH = h * 0.08;
       const bottomGeo = new THREE.CylinderGeometry(r, r * 0.7, taperH, 64);
       const bottom = new THREE.Mesh(bottomGeo, topMat);
@@ -562,19 +591,16 @@ function updateObject(group: THREE.Group, type: ObjectType) {
       const top = new THREE.Mesh(topGeo, topMat);
       top.position.y = bodyH/2 + taperH/2;
 
-      // Rim
       const rimGeo = new THREE.TorusGeometry(r * 0.8, 1.2, 16, 100);
       const rim = new THREE.Mesh(rimGeo, topMat);
       rim.rotation.x = Math.PI/2;
       rim.position.y = bodyH/2 + taperH;
 
-      // Lid Surface
       const lidGeo = new THREE.CircleGeometry(r*0.78, 64);
       const lid = new THREE.Mesh(lidGeo, topMat);
       lid.rotation.x = -Math.PI/2;
       lid.position.y = bodyH/2 + taperH - 0.5;
 
-      // Pull Tab
       const tabGeo = new THREE.BoxGeometry(10, 1, 15);
       const tab = new THREE.Mesh(tabGeo, topMat);
       tab.position.y = bodyH/2 + taperH + 1;
@@ -599,63 +625,42 @@ function updateObject(group: THREE.Group, type: ObjectType) {
   }
   else if (type === ObjectType.BottleCap) {
       const cap = createRealisticCrownCap(dim.w / 2);
-      cap.rotation.x = -Math.PI/2; // Orient flat for inspection
+      cap.rotation.x = -Math.PI/2; 
       group.add(cap);
   }
 }
 
-// Procedural Crown Cap Geometry
 function createRealisticCrownCap(radius: number): THREE.Group {
-  // Standard Crown Cap has 21 flutes/teeth.
   const numTeeth = 21;
-  const segments = numTeeth * 2; // 42 segments
+  const segments = numTeeth * 2; 
   const height = 6;
   
   const group = new THREE.Group();
 
-  // Top Disk
   const topGeo = new THREE.CylinderGeometry(radius, radius, 0.5, segments);
   const topMat = new THREE.MeshStandardMaterial({ 
       map: createCrownCapTexture('#b91c1c'),
       roughness: 0.3,
       metalness: 0.5,
-      bumpMap: createCrownCapTexture('#000000'), // Subtle bump
+      bumpMap: createCrownCapTexture('#000000'), 
       bumpScale: 0.1
   });
   const top = new THREE.Mesh(topGeo, topMat);
   top.position.y = height / 2;
   group.add(top);
 
-  // Skirt (The Crimped Part)
-  // We manipulate a cylinder geometry to create the wave pattern
   const skirtGeo = new THREE.CylinderGeometry(radius, radius * 1.05, height, segments, 4, true);
   const posAttribute = skirtGeo.attributes.position;
   const vertex = new THREE.Vector3();
 
-  // Deform vertices
   for (let i = 0; i < posAttribute.count; i++) {
     vertex.fromBufferAttribute(posAttribute, i);
-    
-    // Convert to cylindrical to easily check angle
     const angle = Math.atan2(vertex.z, vertex.x);
-    // Determine if this segment corresponds to a "tooth" or a "valley"
-    // We have 42 segments. 0, 1 is one tooth pair? No, let's use Math.cos based on angle
-    
-    // Normalized height (0 at center?, no Cylinder is centered at 0)
-    // Cylinder Y ranges from -height/2 to height/2.
-    // We want the deformation to increase towards the bottom (-height/2)
-    
-    const yFactor = (height/2 - vertex.y) / height; // 0 at top, 1 at bottom
-    
-    // Wave function: 21 peaks
+    const yFactor = (height/2 - vertex.y) / height; 
     const wave = Math.cos(angle * numTeeth);
-    
-    // Flare out based on wave
     const flare = 1.0 + (wave * 0.1 * yFactor); 
-    
     vertex.x *= flare;
     vertex.z *= flare;
-
     posAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
   }
   
@@ -673,7 +678,7 @@ function createRealisticCrownCap(radius: number): THREE.Group {
   return group;
 }
 
-function updateLights(group: THREE.Group, state: SimulationState, camY: number, camZ: number) {
+function updateLights(group: THREE.Group, state: SimulationState, camY: number, camZ: number, targetY: number) {
   while(group.children.length > 0){ group.remove(group.children[0]); }
   const intensityPercent = state.lightIntensity;
   const baseIntensity = intensityPercent / 100;
@@ -682,6 +687,9 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
   const ambient = new THREE.AmbientLight(colorHex, 0.05 + (baseIntensity * 0.05));
   group.add(ambient);
 
+  // Note: camY includes the target offset.
+  // We want to position lights relative to the camera or target.
+
   if (state.lightType === LightType.BackLight) {
      const plane = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshBasicMaterial({ color: visualColor }));
      plane.position.z = -100; plane.lookAt(0,0,0); group.add(plane);
@@ -689,27 +697,53 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
      backLight.position.set(0, 0, -200); group.add(backLight); group.add(backLight.target);
   } else if (state.lightType === LightType.RingLight) {
      const light = new THREE.SpotLight(colorHex, baseIntensity * 120);
-     light.position.set(0, camY, camZ); light.distance = 5000; light.angle = 0.65; light.penumbra = 0.3; light.decay = 0;
+     light.position.set(0, camY, camZ); 
+     light.target.position.set(0, targetY, 0); // Point at focus
+     light.distance = 5000; light.angle = 0.65; light.penumbra = 0.3; light.decay = 0;
      group.add(light); group.add(light.target);
      const ring = new THREE.Mesh(new THREE.TorusGeometry(22, 3, 16, 32), new THREE.MeshBasicMaterial({ color: visualColor }));
-     ring.position.set(0, camY, camZ); ring.lookAt(0, 0, 0); group.add(ring);
+     ring.position.set(0, camY, camZ); 
+     ring.lookAt(0, targetY, 0); // Orient towards focus
+     group.add(ring);
   } else if (state.lightType === LightType.Coaxial) {
      const light = new THREE.SpotLight(colorHex, baseIntensity * 250); 
      light.position.set(0, camY, camZ); light.angle = 0.35; light.penumbra = 0.1; light.decay = 0;
+     light.target.position.set(0, targetY, 0);
      group.add(light); group.add(light.target);
      const box = new THREE.Mesh(new THREE.BoxGeometry(15, 15, 30), new THREE.MeshBasicMaterial({ color: visualColor }));
-     const offset = new THREE.Vector3(25, 0, 0); offset.applyAxisAngle(new THREE.Vector3(1,0,0), (state.cameraAngle * Math.PI)/180);
-     box.position.set(0, camY, camZ).add(offset); box.lookAt(box.position.clone().add(new THREE.Vector3(0,0,-1))); group.add(box);
+     const offset = new THREE.Vector3(25, 0, 0); 
+     // We need to rotate offset to match camera tilt
+     offset.applyAxisAngle(new THREE.Vector3(1,0,0), (state.cameraAngle * Math.PI)/180);
+     box.position.set(0, camY, camZ).add(offset); 
+     box.lookAt(box.position.clone().add(new THREE.Vector3(0,0,-1))); // Just a visual box
+     group.add(box);
   } else if (state.lightType === LightType.LowAngle) {
+     // Low Angle light is usually fixed to the fixture base, not moving with camera?
+     // Actually if we are inspecting Top of bottle, we might have a high ring light.
+     // But "Low Angle Ring" specifically usually means sitting on the conveyor.
+     // So we keep it fixed at Z=5 (near object surface)
      for(let i=0; i<8; i++) {
         const ang = (i / 8) * Math.PI * 2;
         const spot = new THREE.SpotLight(colorHex, baseIntensity * 80);
-        spot.position.set(Math.cos(ang) * 90, Math.sin(ang) * 90, 5);
+        spot.position.set(Math.cos(ang) * 90, Math.sin(ang) * 90, 5); // Z=5 is slightly above Z=0 plane? No, Z is depth here.
+        // Coordinate system: Y is up/down tower. Z is distance to camera.
+        // Actually in this scene setup:
+        // Bottle is vertical along Y. Camera is at +Z.
+        // So Low Angle Ring should be in XZ plane around the bottle?
+        // Wait, current bottle is -h/2 to h/2 Y.
+        // Low angle ring should be at Y = -h/2 (bottom of bottle) or Y = targetY?
+        // Typically Low Angle is for surface inspection. Let's make it follow the TargetY to simulate a ring light mounted close to the inspection point.
+        
+        spot.position.set(Math.cos(ang) * 90, targetY, Math.sin(ang) * 90);
+        spot.target.position.set(0, targetY, 0);
+        
         spot.angle = 0.6; spot.penumbra = 0.4; spot.decay = 0; 
         group.add(spot); group.add(spot.target);
      }
      const ring = new THREE.Mesh(new THREE.TorusGeometry(90, 2, 8, 64), new THREE.MeshBasicMaterial({ color: visualColor }));
-     ring.position.set(0, 0, 5); group.add(ring);
+     ring.position.set(0, targetY, 0); 
+     ring.rotation.x = Math.PI / 2; // Lie flat in XZ plane
+     group.add(ring);
   }
 }
 

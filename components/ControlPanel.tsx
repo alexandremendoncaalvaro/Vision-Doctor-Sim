@@ -4,10 +4,12 @@ import {
   LightColor, 
   LightType, 
   ObjectType, 
-  SimulationState 
+  SimulationState,
+  ViewFocus,
+  ObjectOrientation
 } from '../types';
 import { STANDARD_FOCAL_LENGTHS, STANDARD_APERTURES, OBJECT_GOALS } from '../constants';
-import { Camera, Lightbulb, Box, Activity, Target, RotateCw, Wind, Palette, Scan, Signal } from 'lucide-react';
+import { Camera, Lightbulb, Box, Activity, Target, RotateCw, Wind, Palette, Scan, Signal, Eye, Move3d } from 'lucide-react';
 
 interface ControlPanelProps {
   state: SimulationState;
@@ -20,6 +22,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
   
   const handleChange = (key: keyof SimulationState, value: any) => {
     onChange({ [key]: value });
+  };
+
+  const handleObjectChange = (type: ObjectType) => {
+    // Reset goal when object changes
+    onChange({ 
+      objectType: type,
+      inspectionGoal: OBJECT_GOALS[type][0]
+    });
   };
 
   const backgroundOptions = [
@@ -45,24 +55,71 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
         {/* Object Selection */}
         <section className="space-y-3">
           <div className="flex items-center gap-2 text-slate-300 font-medium">
-            <Box size={16} /> Object & Scenario
+            <Box size={16} /> Object & Goal
           </div>
-          <select 
-            className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
-            value={state.objectType}
-            onChange={(e) => handleChange('objectType', e.target.value)}
-          >
-            {Object.values(ObjectType).map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
+          <div className="space-y-1">
+            <label className="text-xs text-slate-500">Target Object</label>
+            <select 
+              className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+              value={state.objectType}
+              onChange={(e) => handleObjectChange(e.target.value as ObjectType)}
+            >
+              {Object.values(ObjectType).map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
 
-          {/* Scenario Goal Hint */}
-          <div className="bg-slate-800/50 rounded p-3 border-l-2 border-emerald-500">
-             <div className="flex items-start gap-2 text-xs text-slate-300">
-               <Target size={14} className="mt-0.5 text-emerald-400 shrink-0" />
-               <p>{OBJECT_GOALS[state.objectType]}</p>
+          <div className="space-y-1">
+             <div className="flex items-center gap-1 text-xs text-slate-500">
+               <Target size={12} className="text-emerald-500" /> Inspection Goal
              </div>
+             <select 
+              className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
+              value={state.inspectionGoal}
+              onChange={(e) => handleChange('inspectionGoal', e.target.value)}
+            >
+              {OBJECT_GOALS[state.objectType].map((goal) => (
+                <option key={goal} value={goal}>{goal}</option>
+              ))}
+            </select>
+          </div>
+        </section>
+
+        {/* View & Orientation */}
+        <section className="space-y-3">
+          <div className="flex items-center gap-2 text-slate-300 font-medium">
+            <Move3d size={16} /> View & Orientation
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-slate-500 flex items-center gap-1">
+              <Eye size={10} /> Camera Focus
+            </label>
+            <div className="grid grid-cols-4 gap-1 p-1 bg-slate-800 rounded-md">
+              {(['Top', 'Middle', 'Bottom', 'Whole'] as ViewFocus[]).map((focus) => (
+                 <button
+                   key={focus}
+                   onClick={() => handleChange('viewFocus', focus)}
+                   className={`text-[10px] py-1 rounded ${state.viewFocus === focus ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+                 >
+                   {focus}
+                 </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+             <label className="text-xs text-slate-500">Object Orientation</label>
+             <select 
+                className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200"
+                value={state.objectOrientation}
+                onChange={(e) => handleChange('objectOrientation', e.target.value)}
+             >
+               {(['Front', 'Side', 'Back', 'Top', 'Bottom'] as ObjectOrientation[]).map((o) => (
+                 <option key={o} value={o}>{o}</option>
+               ))}
+             </select>
           </div>
         </section>
 
@@ -87,17 +144,15 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
 
           <div className="space-y-1">
             <label className="text-xs text-slate-500">Focal Length (mm)</label>
-            <div className="grid grid-cols-4 gap-2">
+            <select
+              className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200"
+              value={state.focalLength}
+              onChange={(e) => handleChange('focalLength', Number(e.target.value))}
+            >
               {STANDARD_FOCAL_LENGTHS.map((fl) => (
-                <button
-                  key={fl}
-                  onClick={() => handleChange('focalLength', fl)}
-                  className={`text-xs py-1 rounded border ${state.focalLength === fl ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
-                >
-                  {fl}
-                </button>
+                <option key={fl} value={fl}>{fl} mm</option>
               ))}
-            </div>
+            </select>
           </div>
 
           <div className="space-y-1">
