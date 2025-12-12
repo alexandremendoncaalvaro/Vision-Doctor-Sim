@@ -7,17 +7,22 @@ import {
   ObjectType,
   OpticalMetrics,
   DoctorAdvice,
-  ValidationResult
+  ValidationResult,
+  Language
 } from './types';
 import { SENSOR_SPECS, OBJECT_DIMS, OBJECT_GOALS } from './constants';
 import { analyzeSetup } from './services/geminiService';
 import ControlPanel from './components/ControlPanel';
 import SchematicView from './components/SchematicView';
 import SimulatedImage from './components/SimulatedImage';
-import { Play, Grid, MessageSquare, AlertCircle, Box, Video, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { TEXTS } from './translations';
+import { Play, Grid, MessageSquare, AlertCircle, Box, Video, CheckCircle, XCircle, AlertTriangle, Globe } from 'lucide-react';
 
 const App: React.FC = () => {
   // --- STATE ---
+  const [language, setLanguage] = useState<Language>('pt-BR');
+  const t = TEXTS[language];
+
   const [state, setState] = useState<SimulationState>({
     sensorFormat: SensorFormat.Type_2_3,
     focalLength: 16,
@@ -152,7 +157,7 @@ const App: React.FC = () => {
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
     setShowAdvicePanel(true);
-    const result = await analyzeSetup(state, metrics);
+    const result = await analyzeSetup(state, metrics, language);
     setAdvice(result);
     setIsAnalyzing(false);
   };
@@ -162,6 +167,17 @@ const App: React.FC = () => {
     if (status === 'acceptable') return <AlertTriangle size={16} className="text-yellow-500" />;
     return <XCircle size={16} className="text-red-500" />;
   };
+
+  const getTranslatedValidation = (val: string) => {
+      switch(val) {
+          case 'good': return t.valGood;
+          case 'acceptable': return t.valAcceptable;
+          case 'poor': return t.valPoor;
+          case 'dark': return t.valDark;
+          case 'bright': return t.valBright;
+          default: return val;
+      }
+  }
 
   // --- RENDER ---
   return (
@@ -174,13 +190,14 @@ const App: React.FC = () => {
           onChange={handleStateChange} 
           onAnalyze={handleAnalyze}
           isAnalyzing={isAnalyzing}
+          language={language}
         />
       </div>
 
       {/* Main Content: Viewport */}
       <div className="flex-1 flex flex-col h-full relative">
         
-        {/* Tabs */}
+        {/* Tabs & Language */}
         <div className="h-12 bg-slate-900 border-b border-slate-700 flex items-center px-4 justify-between">
           <div className="flex items-center gap-4">
             <div className="flex space-x-1 bg-slate-800 p-1 rounded-lg">
@@ -188,13 +205,13 @@ const App: React.FC = () => {
                 onClick={() => setViewMode('schematic')}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${viewMode === 'schematic' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
               >
-                <Grid size={16} /> Schematic
+                <Grid size={16} /> {t.schematic}
               </button>
               <button 
                 onClick={() => setViewMode('simulation')}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${viewMode === 'simulation' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
               >
-                <Play size={16} /> Simulator
+                <Play size={16} /> {t.simulator}
               </button>
             </div>
 
@@ -206,67 +223,83 @@ const App: React.FC = () => {
                   title="Camera POV"
                   className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-2 transition-all ${simulationViewType === 'camera' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
                 >
-                  <Video size={14} /> Camera View
+                  <Video size={14} /> {t.cameraView}
                 </button>
                 <button 
                   onClick={() => setSimulationViewType('free')}
                   title="Free 3D View"
                   className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-2 transition-all ${simulationViewType === 'free' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
                 >
-                  <Box size={14} /> Free View
+                  <Box size={14} /> {t.freeView}
                 </button>
               </div>
             )}
           </div>
+          
+          <div className="flex items-center gap-4">
+              <div className="flex items-center bg-slate-800 rounded-md p-1">
+                  <Globe size={16} className="text-slate-400 mx-2" />
+                  <select 
+                    className="bg-transparent text-sm text-slate-300 outline-none"
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value as Language)}
+                  >
+                      <option value="pt-BR">Português (BR)</option>
+                      <option value="en">English</option>
+                      <option value="es">Español</option>
+                  </select>
+              </div>
 
-          <button 
-            onClick={() => setShowAdvicePanel(!showAdvicePanel)}
-            className={`p-2 rounded-full hover:bg-slate-800 transition-colors ${advice ? 'text-indigo-400' : 'text-slate-500'}`}
-            title="Toggle Doctor Advice"
-          >
-            <MessageSquare size={20} />
-          </button>
+              <button 
+                onClick={() => setShowAdvicePanel(!showAdvicePanel)}
+                className={`p-2 rounded-full hover:bg-slate-800 transition-colors ${advice ? 'text-indigo-400' : 'text-slate-500'}`}
+                title={t.toggleDoctor}
+              >
+                <MessageSquare size={20} />
+              </button>
+          </div>
         </div>
 
         {/* View Canvas */}
         <div className="flex-1 relative bg-slate-950 overflow-hidden flex flex-col">
           {viewMode === 'schematic' ? (
-            <SchematicView state={state} metrics={metrics} />
+            <SchematicView state={state} metrics={metrics} language={language} />
           ) : (
             <SimulatedImage 
               state={state} 
               metrics={metrics} 
               viewType={simulationViewType}
+              language={language}
             />
           )}
 
           {/* Automatic Validation Panel */}
           {viewMode === 'simulation' && simulationViewType === 'camera' && (
              <div className="absolute bottom-4 left-4 z-20 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-lg p-3 shadow-xl pointer-events-none">
-                <div className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Scenario Check</div>
+                <div className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">{t.scenarioCheck}</div>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-300">Framing (ROI)</span>
+                      <span className="text-slate-300">{t.valFraming}</span>
                       <div className="flex items-center gap-1 capitalize text-xs">
-                        {getStatusIcon(validation.roi)} {validation.roi}
+                        {getStatusIcon(validation.roi)} {getTranslatedValidation(validation.roi)}
                       </div>
                    </div>
                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-300">Stability</span>
+                      <span className="text-slate-300">{t.valStability}</span>
                       <div className="flex items-center gap-1 capitalize text-xs">
-                        {getStatusIcon(validation.stability)} {validation.stability}
+                        {getStatusIcon(validation.stability)} {getTranslatedValidation(validation.stability)}
                       </div>
                    </div>
                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-300">Contrast</span>
+                      <span className="text-slate-300">{t.valContrast}</span>
                       <div className="flex items-center gap-1 capitalize text-xs">
-                        {getStatusIcon(validation.contrast)} {validation.contrast}
+                        {getStatusIcon(validation.contrast)} {getTranslatedValidation(validation.contrast)}
                       </div>
                    </div>
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-300">Exposure</span>
+                      <span className="text-slate-300">{t.valExposure}</span>
                       <div className="flex items-center gap-1 capitalize text-xs">
-                        {validation.exposure === 'good' ? getStatusIcon('good') : getStatusIcon('poor')} {validation.exposure}
+                        {validation.exposure === 'good' ? getStatusIcon('good') : getStatusIcon('poor')} {getTranslatedValidation(validation.exposure)}
                       </div>
                    </div>
                 </div>
@@ -280,7 +313,7 @@ const App: React.FC = () => {
             <div className="p-4 bg-indigo-900/30 border-b border-indigo-500/20 flex justify-between items-center">
               <h3 className="font-semibold text-indigo-100 flex items-center gap-2">
                 <AlertCircle size={16} /> 
-                Dr. Vision's Report
+                {t.reportTitle}
               </h3>
               <button 
                 onClick={() => setShowAdvicePanel(false)}
@@ -293,7 +326,7 @@ const App: React.FC = () => {
             <div className="p-4 overflow-y-auto">
               {!advice ? (
                 <div className="text-center py-8 text-slate-400 text-sm">
-                  <p>Click "Ask Doctor AI" to generate a report.</p>
+                  <p>{t.noReport}</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -314,8 +347,10 @@ const App: React.FC = () => {
                       <span className="absolute text-sm font-bold">{advice.score}</span>
                     </div>
                     <div>
-                      <div className="text-xs text-slate-400 uppercase tracking-wider">Suitability</div>
-                      <div className="font-medium text-slate-200">{advice.score > 80 ? 'Excellent' : advice.score > 50 ? 'Acceptable' : 'Poor'}</div>
+                      <div className="text-xs text-slate-400 uppercase tracking-wider">{t.reportScore}</div>
+                      <div className="font-medium text-slate-200">
+                          {advice.score > 80 ? t.reportExcellent : advice.score > 50 ? t.reportAcceptable : t.reportPoor}
+                      </div>
                     </div>
                   </div>
 

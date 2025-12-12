@@ -2,17 +2,20 @@ import React, { useEffect, useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { SimulationState, OpticalMetrics, LightColor, LightType, ObjectType } from '../types';
+import { SimulationState, OpticalMetrics, LightColor, LightType, ObjectType, Language } from '../types';
 import { OBJECT_DIMS } from '../constants';
+import { TEXTS } from '../translations';
 
 interface SimulatedImageProps {
   state: SimulationState;
   metrics: OpticalMetrics;
   viewType: 'camera' | 'free';
+  language: Language;
 }
 
-const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewType }) => {
+const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewType, language }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const t = TEXTS[language];
   
   // Refs
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -289,15 +292,12 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
       <div className="absolute top-4 right-4 bg-slate-900/80 backdrop-blur text-slate-200 p-3 rounded-md text-xs font-mono border border-slate-700 pointer-events-none select-none z-10 shadow-lg">
         <div className={`font-bold mb-2 ${viewType === 'camera' ? 'text-emerald-400' : 'text-indigo-400'} flex items-center gap-2`}>
            <div className={`w-2 h-2 rounded-full ${viewType === 'camera' ? 'bg-emerald-500' : 'bg-indigo-500'} animate-pulse`} />
-          {viewType === 'camera' ? 'SENSOR VIEW' : 'WORLD VIEW'}
+          {viewType === 'camera' ? t.hudSensor : t.hudWorld}
         </div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-400">
-          <span>EXP:</span> <span className="text-slate-200 text-right">{(state.exposureTime/1000).toFixed(1)}ms</span>
-          <span>GAIN:</span> <span className="text-slate-200 text-right">{rendererRef.current?.toneMappingExposure.toFixed(1) || '1.0'}</span>
-          <span>FPS:</span> <span className="text-slate-200 text-right">{Math.min(1000000/state.exposureTime, 60).toFixed(0)}</span>
-        </div>
-        <div className="mt-2 text-slate-500 border-t border-slate-700 pt-1">
-           {state.inspectionGoal}
+          <span>{t.hudExp}:</span> <span className="text-slate-200 text-right">{(state.exposureTime/1000).toFixed(1)}ms</span>
+          <span>{t.hudGain}:</span> <span className="text-slate-200 text-right">{rendererRef.current?.toneMappingExposure.toFixed(1) || '1.0'}</span>
+          <span>{t.hudFps}:</span> <span className="text-slate-200 text-right">{Math.min(1000000/state.exposureTime, 60).toFixed(0)}</span>
         </div>
       </div>
     </div>

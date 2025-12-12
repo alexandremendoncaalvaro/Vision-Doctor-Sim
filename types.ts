@@ -1,4 +1,6 @@
 
+export type Language = 'pt-BR' | 'en' | 'es';
+
 export enum SensorFormat {
   Type_1_3 = "1/3\"",
   Type_1_2 = "1/2\"",

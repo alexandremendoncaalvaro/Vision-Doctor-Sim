@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
-import { SimulationState, OpticalMetrics, LightType, LightColor } from '../types';
+import { SimulationState, OpticalMetrics, LightType, LightColor, Language } from '../types';
 import { SENSOR_SPECS, OBJECT_DIMS } from '../constants';
+import { TEXTS } from '../translations';
 import { RectangleHorizontal, RectangleVertical } from 'lucide-react';
 
 interface SchematicViewProps {
   state: SimulationState;
   metrics: OpticalMetrics;
+  language: Language;
 }
 
-const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics }) => {
+const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics, language }) => {
   const [isVertical, setIsVertical] = useState(false);
+  const t = TEXTS[language];
 
   // Scaling factor for drawing to fit SVG
   const MAX_WIDTH_MM = 1200;
@@ -87,7 +90,7 @@ const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics }) => {
             <rect x={coaxX + 5} y={coaxY + 5} width={20} height={10} fill={lightColorHex} />
             <line x1={coaxX} y1={-20} x2={coaxX + 30} y2={-50} stroke="#94a3b8" strokeWidth="1" />
             <path d={`M ${coaxX + 15} ${coaxY + 10} L ${coaxX + 15} 0 L 0 0`} stroke={lightColorHex} strokeDasharray="5,5" strokeOpacity="0.8" fill="none" />
-            <Label x={coaxX + 15} y={coaxY - 10} fill={lightColorHex} fontSize="12" textAnchor="middle">Coaxial</Label>
+            <Label x={coaxX + 15} y={coaxY - 10} fill={lightColorHex} fontSize="12" textAnchor="middle">{t.schCoaxial}</Label>
           </g>
         );
      }
@@ -101,7 +104,7 @@ const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics }) => {
             <rect x={20} y={-scale(150)} width={10} height={scale(300)} fill={lightColorHex} fillOpacity="0.8" stroke={lightColorHex}/>
             <path d="M 20 -50 L 0 -20" stroke={lightColorHex} strokeDasharray="4,4" />
             <path d="M 20 50 L 0 20" stroke={lightColorHex} strokeDasharray="4,4" />
-            <Label x={35} y={0} fill={lightColorHex} fontSize="12" textAnchor="start" dominantBaseline="middle">Backlight</Label>
+            <Label x={35} y={0} fill={lightColorHex} fontSize="12" textAnchor="start" dominantBaseline="middle">{t.schBacklight}</Label>
           </g>
         );
     }
@@ -115,7 +118,7 @@ const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics }) => {
              <circle cx={-25} cy={laRadius - 2} r={4} fill={lightColorHex} />
              <line x1={-25} y1={-laRadius + 2} x2={0} y2={-5} stroke={lightColorHex} strokeWidth="2" strokeOpacity="0.6" />
              <line x1={-25} y1={laRadius - 2} x2={0} y2={5} stroke={lightColorHex} strokeWidth="2" strokeOpacity="0.6" />
-             <Label x={-35} y={-laRadius - 15} fill={lightColorHex} fontSize="12" textAnchor="end">Low Angle</Label>
+             <Label x={-35} y={-laRadius - 15} fill={lightColorHex} fontSize="12" textAnchor="end">{t.schLowAngle}</Label>
           </g>
         );
     }
@@ -172,14 +175,14 @@ const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics }) => {
 
                   {/* Camera Body */}
                   <rect x={sensorLocalX - 30} y={-25} width={30} height={50} fill="#475569" rx="4" />
-                  <Label x={sensorLocalX - 45} y={0} fill="#94a3b8" fontSize="12" textAnchor="middle" dominantBaseline="middle">Camera</Label>
+                  <Label x={sensorLocalX - 45} y={0} fill="#94a3b8" fontSize="12" textAnchor="middle" dominantBaseline="middle">{t.schCamera}</Label>
                   
                   {/* Sensor */}
                   <line x1={sensorLocalX} y1={-sensorH/2} x2={sensorLocalX} y2={sensorH/2} stroke="#ef4444" strokeWidth="4" />
 
                   {/* Lens */}
                   <path d={`M ${lensLocalX-5} -15 L ${lensLocalX+5} 0 L ${lensLocalX-5} 15 Z`} fill="#94a3b8" />
-                  <Label x={lensLocalX} y={-25} fill="#94a3b8" fontSize="12" textAnchor="middle">Lens</Label>
+                  <Label x={lensLocalX} y={-25} fill="#94a3b8" fontSize="12" textAnchor="middle">{t.schLens}</Label>
                   
                   {/* Camera Attached Lights */}
                   {renderCameraAttachedLights()}
@@ -200,7 +203,7 @@ const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics }) => {
                   height={objectH} 
                   fill="#22c55e" 
                   />
-                  <Label x={20} y={0} fill="#22c55e" fontSize="12" textAnchor="start" dominantBaseline="middle">Object</Label>
+                  <Label x={20} y={0} fill="#22c55e" fontSize="12" textAnchor="start" dominantBaseline="middle">{t.schObject}</Label>
               </g>
               
               {/* Angle Indicator Arc */}
@@ -214,7 +217,7 @@ const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics }) => {
               {/* Working Distance Marker */}
               {/* Needs special handling for rotation because it spans distance */}
               <line x1={objectX + lensLocalX} y1={centerlineY + 60} x2={objectX} y2={centerlineY + 60} stroke="#64748b" markerEnd="url(#arrow)" markerStart="url(#arrow)" />
-              <Label x={objectX + lensLocalX/2} y={centerlineY + 50} fill="#cbd5e1" fontSize="12" textAnchor="middle">WD: {state.workingDistance}mm</Label>
+              <Label x={objectX + lensLocalX/2} y={centerlineY + 50} fill="#cbd5e1" fontSize="12" textAnchor="middle">{t.schWd}: {state.workingDistance}mm</Label>
             </g>
 
          </svg>
@@ -223,15 +226,15 @@ const SchematicView: React.FC<SchematicViewProps> = ({ state, metrics }) => {
       {/* Metrics Footer */}
       <div className="h-16 bg-slate-900 border-t border-slate-700 flex items-center justify-around px-4 text-sm z-20">
         <div className="text-center">
-          <div className="text-slate-400 text-xs">FOV (H x V)</div>
+          <div className="text-slate-400 text-xs">{t.statFov}</div>
           <div className="text-blue-400 font-mono">{metrics.fovWidth.toFixed(1)} x {metrics.fovHeight.toFixed(1)} mm</div>
         </div>
         <div className="text-center">
-          <div className="text-slate-400 text-xs">Magnification</div>
+          <div className="text-slate-400 text-xs">{t.statMag}</div>
           <div className="text-emerald-400 font-mono">{metrics.magnification.toFixed(3)}x</div>
         </div>
         <div className="text-center">
-          <div className="text-slate-400 text-xs">Depth of Field</div>
+          <div className="text-slate-400 text-xs">{t.statDof}</div>
           <div className="text-orange-400 font-mono">~{metrics.dof.toFixed(1)} mm</div>
         </div>
       </div>

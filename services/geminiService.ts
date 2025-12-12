@@ -1,11 +1,12 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { SimulationState, OpticalMetrics, DoctorAdvice } from "../types";
+import { SimulationState, OpticalMetrics, DoctorAdvice, Language } from "../types";
 
 const GEMINI_API_KEY = process.env.API_KEY || '';
 
 export const analyzeSetup = async (
   state: SimulationState, 
-  metrics: OpticalMetrics
+  metrics: OpticalMetrics,
+  language: Language
 ): Promise<DoctorAdvice> => {
   if (!GEMINI_API_KEY) {
     return {
@@ -16,6 +17,8 @@ export const analyzeSetup = async (
   }
 
   const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
+  const langName = language === 'pt-BR' ? 'Portuguese (Brazil)' : language === 'es' ? 'Spanish' : 'English';
 
   const prompt = `
     You are an expert Machine Vision Engineer ("Vision Doctor"). 
@@ -41,6 +44,8 @@ export const analyzeSetup = async (
     
     Task:
     Provide a critique of this setup specifically for the goal: "${state.inspectionGoal}".
+    Please write your response in ${langName}.
+    
     1. Is the resolution/magnification sufficient for this specific goal?
     2. Is the lighting type and color appropriate for the material and defect type? (e.g. Low angle for scratches, Backlight for dimensions/fill level).
     3. Is the view angle correct? (e.g. Top view for caps, Side view for labels).

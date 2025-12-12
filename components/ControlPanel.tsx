@@ -6,9 +6,11 @@ import {
   ObjectType, 
   SimulationState,
   ViewFocus,
-  ObjectOrientation
+  ObjectOrientation,
+  Language
 } from '../types';
 import { STANDARD_FOCAL_LENGTHS, STANDARD_APERTURES, OBJECT_GOALS } from '../constants';
+import { TEXTS, GOAL_TRANSLATIONS } from '../translations';
 import { Camera, Lightbulb, Box, Activity, Target, RotateCw, Wind, Palette, Scan, Signal, Eye, Move3d } from 'lucide-react';
 
 interface ControlPanelProps {
@@ -16,9 +18,11 @@ interface ControlPanelProps {
   onChange: (newState: Partial<SimulationState>) => void;
   onAnalyze: () => void;
   isAnalyzing: boolean;
+  language: Language;
 }
 
-const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze, isAnalyzing }) => {
+const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze, isAnalyzing, language }) => {
+  const t = TEXTS[language];
   
   const handleChange = (key: keyof SimulationState, value: any) => {
     onChange({ [key]: value });
@@ -40,14 +44,18 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
     { name: 'Green', value: '#064e3b' },
   ];
 
+  const getTranslatedGoal = (goalKey: string) => {
+    return GOAL_TRANSLATIONS[goalKey]?.[language] || goalKey;
+  };
+
   return (
     <div className="flex flex-col h-full bg-slate-900 border-r border-slate-700 overflow-y-auto custom-scrollbar">
       <div className="p-4 border-b border-slate-700 bg-slate-900 sticky top-0 z-10">
         <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2">
           <Activity className="text-blue-500" />
-          Vision Doctor
+          {t.appTitle}
         </h1>
-        <p className="text-xs text-slate-400 mt-1">Industrial Optical Simulator</p>
+        <p className="text-xs text-slate-400 mt-1">{t.appSubtitle}</p>
       </div>
 
       <div className="p-4 space-y-8 pb-20">
@@ -55,24 +63,24 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
         {/* Object Selection */}
         <section className="space-y-3">
           <div className="flex items-center gap-2 text-slate-300 font-medium">
-            <Box size={16} /> Object & Goal
+            <Box size={16} /> {t.sectionObject}
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-slate-500">Target Object</label>
+            <label className="text-xs text-slate-500">{t.targetObject}</label>
             <select 
               className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
               value={state.objectType}
               onChange={(e) => handleObjectChange(e.target.value as ObjectType)}
             >
-              {Object.values(ObjectType).map((t) => (
-                <option key={t} value={t}>{t}</option>
+              {Object.values(ObjectType).map((type) => (
+                <option key={type} value={type}>{t.objects[type] || type}</option>
               ))}
             </select>
           </div>
 
           <div className="space-y-1">
              <div className="flex items-center gap-1 text-xs text-slate-500">
-               <Target size={12} className="text-emerald-500" /> Inspection Goal
+               <Target size={12} className="text-emerald-500" /> {t.inspectionGoal}
              </div>
              <select 
               className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -80,7 +88,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
               onChange={(e) => handleChange('inspectionGoal', e.target.value)}
             >
               {OBJECT_GOALS[state.objectType].map((goal) => (
-                <option key={goal} value={goal}>{goal}</option>
+                <option key={goal} value={goal}>{getTranslatedGoal(goal)}</option>
               ))}
             </select>
           </div>
@@ -89,12 +97,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
         {/* View & Orientation */}
         <section className="space-y-3">
           <div className="flex items-center gap-2 text-slate-300 font-medium">
-            <Move3d size={16} /> View & Orientation
+            <Move3d size={16} /> {t.sectionView}
           </div>
 
           <div className="space-y-1">
             <label className="text-xs text-slate-500 flex items-center gap-1">
-              <Eye size={10} /> Camera Focus
+              <Eye size={10} /> {t.cameraFocus}
             </label>
             <div className="grid grid-cols-4 gap-1 p-1 bg-slate-800 rounded-md">
               {(['Top', 'Middle', 'Bottom', 'Whole'] as ViewFocus[]).map((focus) => (
@@ -103,21 +111,21 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
                    onClick={() => handleChange('viewFocus', focus)}
                    className={`text-[10px] py-1 rounded ${state.viewFocus === focus ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
                  >
-                   {focus}
+                   {t.focus[focus]}
                  </button>
               ))}
             </div>
           </div>
 
           <div className="space-y-1">
-             <label className="text-xs text-slate-500">Object Orientation</label>
+             <label className="text-xs text-slate-500">{t.objOrientation}</label>
              <select 
                 className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200"
                 value={state.objectOrientation}
                 onChange={(e) => handleChange('objectOrientation', e.target.value)}
              >
                {(['Front', 'Side', 'Back', 'Top', 'Bottom'] as ObjectOrientation[]).map((o) => (
-                 <option key={o} value={o}>{o}</option>
+                 <option key={o} value={o}>{t.orientation[o]}</option>
                ))}
              </select>
           </div>
@@ -126,11 +134,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
         {/* Camera & Lens */}
         <section className="space-y-4">
            <div className="flex items-center gap-2 text-slate-300 font-medium">
-            <Camera size={16} /> Camera & Lens
+            <Camera size={16} /> {t.sectionCamera}
           </div>
           
           <div className="space-y-1">
-            <label className="text-xs text-slate-500">Sensor Format</label>
+            <label className="text-xs text-slate-500">{t.sensorFormat}</label>
             <select 
               className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200"
               value={state.sensorFormat}
@@ -143,7 +151,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs text-slate-500">Focal Length (mm)</label>
+            <label className="text-xs text-slate-500">{t.focalLength}</label>
             <select
               className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200"
               value={state.focalLength}
@@ -156,7 +164,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
           </div>
 
           <div className="space-y-1">
-             <label className="text-xs text-slate-500">Aperture (f-stop)</label>
+             <label className="text-xs text-slate-500">{t.aperture}</label>
              <select 
               className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200"
               value={state.aperture}
@@ -169,7 +177,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
           </div>
 
            <div className="space-y-1">
-             <label className="text-xs text-slate-500">Working Distance ({state.workingDistance}mm)</label>
+             <label className="text-xs text-slate-500">{t.workingDistance} ({state.workingDistance}mm)</label>
              <input 
                type="range" 
                min="50" 
@@ -184,7 +192,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
           <div className="space-y-1">
              <div className="flex items-center justify-between">
                 <label className="text-xs text-slate-500 flex items-center gap-1">
-                  <RotateCw size={10} /> Tilt Angle
+                  <RotateCw size={10} /> {t.tiltAngle}
                 </label>
                 <span className="text-xs text-slate-300 font-mono">{state.cameraAngle}°</span>
              </div>
@@ -203,38 +211,38 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
         {/* Lighting & Exposure */}
         <section className="space-y-4">
            <div className="flex items-center gap-2 text-slate-300 font-medium">
-            <Lightbulb size={16} /> Light & Exposure
+            <Lightbulb size={16} /> {t.sectionLight}
           </div>
           
           <div className="grid grid-cols-2 gap-3">
              <div className="space-y-1">
-              <label className="text-xs text-slate-500">Type</label>
+              <label className="text-xs text-slate-500">{t.lightType}</label>
               <select 
                 className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200"
                 value={state.lightType}
                 onChange={(e) => handleChange('lightType', e.target.value)}
               >
-                {Object.values(LightType).map((t) => (
-                  <option key={t} value={t}>{t}</option>
+                {Object.values(LightType).map((type) => (
+                  <option key={type} value={type}>{t.lights[type] || type}</option>
                 ))}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-slate-500">Color</label>
+              <label className="text-xs text-slate-500">{t.lightColor}</label>
               <select 
                 className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200"
                 value={state.lightColor}
                 onChange={(e) => handleChange('lightColor', e.target.value)}
               >
                 {Object.values(LightColor).map((c) => (
-                  <option key={c} value={c}>{c}</option>
+                  <option key={c} value={c}>{t.colors[c] || c}</option>
                 ))}
               </select>
             </div>
           </div>
 
           <div className="space-y-1">
-             <label className="text-xs text-slate-500">Light Intensity ({state.lightIntensity}%)</label>
+             <label className="text-xs text-slate-500">{t.lightIntensity} ({state.lightIntensity}%)</label>
              <input 
                type="range" 
                min="0" 
@@ -246,7 +254,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
           </div>
 
           <div className="space-y-1">
-             <label className="text-xs text-slate-500">Exposure Time ({state.exposureTime}µs)</label>
+             <label className="text-xs text-slate-500">{t.exposureTime} ({state.exposureTime}µs)</label>
              <input 
                type="range" 
                min="100" 
@@ -259,7 +267,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
           </div>
 
           <div className="space-y-1">
-             <label className="text-xs text-slate-500 flex items-center gap-1"><Signal size={10} /> Sensor Gain ({state.gain}dB)</label>
+             <label className="text-xs text-slate-500 flex items-center gap-1"><Signal size={10} /> {t.sensorGain} ({state.gain}dB)</label>
              <input 
                type="range" 
                min="0" 
@@ -275,12 +283,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
         {/* Environment & Motion */}
         <section className="space-y-4">
            <div className="flex items-center gap-2 text-slate-300 font-medium">
-            <Wind size={16} /> Environment
+            <Wind size={16} /> {t.sectionEnv}
           </div>
 
           <div className="space-y-1">
              <label className="text-xs text-slate-500 flex items-center gap-1">
-                <Palette size={10} /> Background
+                <Palette size={10} /> {t.background}
              </label>
              <div className="flex gap-2">
                 {backgroundOptions.map((bg) => (
@@ -296,7 +304,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
           </div>
 
           <div className="space-y-1">
-             <label className="text-xs text-slate-500">Line Speed ({state.objectSpeed} mm/s)</label>
+             <label className="text-xs text-slate-500">{t.lineSpeed} ({state.objectSpeed} mm/s)</label>
              <input 
                type="range" 
                min="0" 
@@ -309,7 +317,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
           </div>
 
           <div className="space-y-1">
-             <label className="text-xs text-slate-500">Vibration Level ({state.vibrationLevel}/10)</label>
+             <label className="text-xs text-slate-500">{t.vibration} ({state.vibrationLevel}/10)</label>
              <input 
                type="range" 
                min="0" 
@@ -322,7 +330,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
           </div>
 
            <div className="space-y-1">
-             <label className="text-xs text-slate-500 flex items-center gap-1"><Scan size={10} /> ROI Size</label>
+             <label className="text-xs text-slate-500 flex items-center gap-1"><Scan size={10} /> {t.roiSize}</label>
              <div className="flex gap-2">
                 <input 
                  type="range" 
@@ -352,10 +360,13 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
             className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-900/20"
           >
              {isAnalyzing ? (
-               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+               <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>{t.analyzing}</span>
+               </div>
              ) : (
                <div className="flex items-center gap-2">
-                 <span>Ask Doctor AI</span>
+                 <span>{t.analyzeBtn}</span>
                </div>
              )}
           </button>
