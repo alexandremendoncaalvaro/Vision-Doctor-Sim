@@ -349,7 +349,8 @@ function createCameraModel(): THREE.Group {
   });
   const glass = new THREE.Mesh(glassGeo, glassMat);
   glass.position.z = 30;
-  glass.lookAt(0,0,100);
+  glass.rotation.x = Math.PI / 2;
+  // glass.lookAt(0,0,100);
   group.add(glass);
   return group;
 }
@@ -718,40 +719,48 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
   let lightPos = new THREE.Vector3();
   let lightTarget = new THREE.Vector3(0, targetY, 0);
 
+  // Determine Camera Position Vector (relative to targetY)
+  // camPos = (0, camY, camZ). Target = (0, targetY, 0).
+  const camVec = new THREE.Vector3(0, camY - targetY, camZ).normalize();
+
   // Position Logic
   switch (state.lightPosition) {
     case LightPosition.Camera:
-      // Strictly follows camera axis
       lightPos.set(0, camY, camZ);
       break;
     case LightPosition.Back:
-      // Behind object means -Z. Must be behind halfD.
       lightPos.set(0, targetY, -halfD - dist);
       break;
     case LightPosition.Top:
-      // Top means +Y. Must be above halfH.
-      // Offset slightly in Z to avoid Gimbal lock (0.01)
       lightPos.set(0, halfH + dist, 0.01); 
       break;
     case LightPosition.Side:
-      // Side means +X. Must be right of halfW.
       lightPos.set(halfW + dist, targetY, 0);
       break;
     case LightPosition.LowAngle:
-      // Generic Low Angle: Position safely outside in Front-Low area
-      // This prevents "inside object" for generic fixtures.
-      lightPos.set(0, targetY, dist + halfD); 
+      // Special Handling for LowAngle:
+      // We don't set a single 'lightPos' here for placement, 
+      // instead we handle it in the fixture logic to create a ring/group aligned to camera.
+      lightPos.set(0, 0, 0); // Placeholder
       break;
     default:
       lightPos.set(0, 0, dist);
   }
 
   const fixtureGroup = new THREE.Group();
-  fixtureGroup.position.copy(lightPos);
   
-  // Look at target.
-  fixtureGroup.lookAt(lightTarget);
-  group.add(fixtureGroup);
+  // If LowAngle, we align the entire fixtureGroup to face the camera, 
+  // then place lights in the XY plane of that group (perpendicular to camera view).
+  if (state.lightPosition === LightPosition.LowAngle) {
+      fixtureGroup.position.set(0, targetY, 0);
+      // Look at camera to align Z axis
+      fixtureGroup.lookAt(0, camY, camZ); 
+      group.add(fixtureGroup);
+  } else {
+      fixtureGroup.position.copy(lightPos);
+      fixtureGroup.lookAt(lightTarget);
+      group.add(fixtureGroup);
+  }
 
   const configShadow = (light: THREE.Light) => {
     light.castShadow = true;
@@ -784,34 +793,34 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
 
   if (fixture === LightFixture.Ring) {
      if (state.lightPosition === LightPosition.LowAngle) {
-         fixtureGroup.removeFromParent(); 
-         const laGroup = new THREE.Group();
-         laGroup.position.set(0, targetY, 0); // Low angle is always relative to target focus plane
-         group.add(laGroup);
+         // Ring in the plane perpendicular to camera (XY local), shifted by +Z local (towards camera)
+         // 'dist' controls the radius of the ring here? Or 'dist' controls Z-offset?
+         // Standard: Low Angle means Close Z, Large Radius.
          
-         // Dynamically calculate radius to be outside object
-         const r = Math.max(dist, Math.max(halfW, halfD) + 30); 
-         
+         // Let's use 'dist' as Radius (Ring Size)
+         // And calculate Z based on a fixed "Low Angle" standoff (e.g. 20mm from object center/face)
+         // Ideally Z should be > object depth.
+         const standoff = Math.max(halfD + 10, 20); 
+         const r = Math.max(dist, halfW + 20); // Radius
+
          for(let i=0; i<8; i++) {
             const a = (i/8)*Math.PI*2;
-            const elevation = 10; 
             const s = new THREE.SpotLight(colorHex, baseIntensity * 200); 
-            s.position.set(Math.cos(a)*r, elevation, Math.sin(a)*r);
+            // Local coords: Z is towards camera. X/Y are plane.
+            // We want lights at Z=standoff, pointing at (0,0,0).
+            s.position.set(Math.cos(a)*r, Math.sin(a)*r, standoff);
             s.target.position.set(0, 0, 0);
             s.angle = 0.6; s.penumbra = 0.5; s.decay = 0; s.distance = 1000;
             configShadow(s);
-            laGroup.add(s); laGroup.add(s.target);
+            fixtureGroup.add(s); fixtureGroup.add(s.target);
          }
          const ringVis = new THREE.Mesh(new THREE.TorusGeometry(r, 2, 8, 32), new THREE.MeshBasicMaterial({ color: visualColor }));
-         ringVis.rotation.x = Math.PI/2;
-         ringVis.position.y = 10;
-         laGroup.add(ringVis);
+         ringVis.position.z = standoff;
+         fixtureGroup.add(ringVis);
 
      } else {
-         // Ring Light on Camera Axis
+         // Ring Light on Camera Axis (already correctly handled by lightPos=Camera)
          const r = 45; 
-         // Ensure visuals don't block camera if camera is close, but typically Ring is AROUND lens.
-         // We create a "hole" by just using spots around a radius.
          for(let i=0; i<8; i++) {
              const a = (i/8)*Math.PI*2;
              addSpot(Math.cos(a)*r, Math.sin(a)*r, 0, 0.6, 25); 
@@ -826,10 +835,9 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
       if (config === LightConfig.Large) size = 400;
 
       if (state.lightPosition === LightPosition.Back) {
-          fixtureGroup.removeFromParent();
+          fixtureGroup.removeFromParent(); // Detach to handle custom directional light
           const dl = new THREE.DirectionalLight(colorHex, baseIntensity * 2);
           
-          // Ensure it's behind the object
           dl.position.set(0, targetY, -halfD - dist);
           dl.target.position.set(0, targetY, 0);
           configShadow(dl);
@@ -844,11 +852,6 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
           plane.lookAt(0, targetY, 0);
           group.add(plane);
       } else {
-          // Standard Panel logic
-          // If on Camera Axis, we push it BACK behind camera to avoid clipping inside the camera model
-          // But effectively it blocks the view. The validation engine flags this.
-          // Visually we still place it at 'dist' from object.
-          
           const d = size / 4;
           addSpot(-d, -d, 0, 0.9, 10);
           addSpot(d, -d, 0, 0.9, 10);
@@ -868,62 +871,58 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
           barGroup.rotation.z = rotZ;
           groupToAddTo.add(barGroup);
 
-          const s1 = new THREE.SpotLight(colorHex, baseIntensity * 40);
+          // Boosted intensity for bars as they are directional
+          const s1 = new THREE.SpotLight(colorHex, baseIntensity * 80);
           s1.position.set(-len/3, 0, 0);
           const t1 = new THREE.Object3D(); t1.position.set(-len/3, 0, 100); 
-          barGroup.add(t1); s1.target = t1; s1.angle=0.6; configShadow(s1); barGroup.add(s1);
+          barGroup.add(t1); s1.target = t1; s1.angle=0.5; configShadow(s1); barGroup.add(s1);
 
-          const s2 = new THREE.SpotLight(colorHex, baseIntensity * 40);
+          const s2 = new THREE.SpotLight(colorHex, baseIntensity * 80);
           s2.position.set(0, 0, 0);
           const t2 = new THREE.Object3D(); t2.position.set(0, 0, 100);
-          barGroup.add(t2); s2.target = t2; s2.angle=0.6; configShadow(s2); barGroup.add(s2);
+          barGroup.add(t2); s2.target = t2; s2.angle=0.5; configShadow(s2); barGroup.add(s2);
 
-          const s3 = new THREE.SpotLight(colorHex, baseIntensity * 40);
+          const s3 = new THREE.SpotLight(colorHex, baseIntensity * 80);
           s3.position.set(len/3, 0, 0);
           const t3 = new THREE.Object3D(); t3.position.set(len/3, 0, 100);
-          barGroup.add(t3); s3.target = t3; s3.angle=0.6; configShadow(s3); barGroup.add(s3);
+          barGroup.add(t3); s3.target = t3; s3.angle=0.5; configShadow(s3); barGroup.add(s3);
 
           // Bar Body
           const vis = new THREE.Mesh(new THREE.BoxGeometry(len, 20, 10), new THREE.MeshBasicMaterial({ color: 0x334155 }));
           barGroup.add(vis);
           
-          // Diffuser Face (Emissive) - visually indicates light direction
+          // Diffuser Face (Emissive)
           const face = new THREE.Mesh(new THREE.PlaneGeometry(len - 4, 16), new THREE.MeshBasicMaterial({ color: visualColor }));
-          face.position.z = 5.1; // Slightly in front of body
+          face.position.z = 5.1; 
           barGroup.add(face);
       }
 
       if (state.lightPosition === LightPosition.LowAngle) {
-          // Special "Surround" logic for Low Angle Bars
-          fixtureGroup.removeFromParent();
-          const laGroup = new THREE.Group();
-          laGroup.position.set(0, targetY, 0);
-          group.add(laGroup);
-
-          // Calculate radius to be safely outside object
-          // For Bar, we position them tangential to this radius
-          const radius = Math.max(dist, Math.max(halfW, halfD) + 30);
-          const elevation = 10; 
+          // Low Angle Bar Logic:
+          // Placed in plane perpendicular to Camera (XY local of fixtureGroup)
+          // At a standoff distance (Z local)
+          // Angled inward towards (0,0,0)
+          
+          const standoff = Math.max(halfD + 10, 30); 
+          const radius = Math.max(dist, halfW + 30); 
 
           const addAngledBar = (angleRad: number) => {
-               // Position on circle
+               // Position on circle in XY plane
                const bx = Math.cos(angleRad) * radius;
-               const bz = Math.sin(angleRad) * radius;
+               const by = Math.sin(angleRad) * radius;
                
-               // Create a holder that looks at center
                const holder = new THREE.Group();
-               holder.position.set(bx, elevation, bz);
-               holder.lookAt(0, elevation, 0); // Face inward
-               laGroup.add(holder);
+               holder.position.set(bx, by, standoff);
+               holder.lookAt(0, 0, 0); // Look at object center
+               fixtureGroup.add(holder);
 
                // Create bar inside holder. createBar makes it face +Z.
-               // lookAt(0,0,0) makes -Z face origin.
-               // So we need to rotate bar to face origin.
+               // holder's +Z points to origin. So lights point to origin. Perfect.
                createBar(holder, 0, 0, 0);
           };
 
           if (config === LightConfig.Single) {
-              // Changed from PI/2 (Front) to 0 (Right Side) to avoid blocking camera
+              // Right Side
               addAngledBar(0); 
           } 
           else if (config === LightConfig.Dual) {
