@@ -105,7 +105,8 @@ const App: React.FC = () => {
       roi: 'good',
       contrast: 'good',
       stability: 'good',
-      exposure: 'good'
+      exposure: 'good',
+      technique: 'good'
     };
 
     // 1. ROI Check (Is object fully inside ROI?)
@@ -149,6 +150,40 @@ const App: React.FC = () => {
     if (obj === ObjectType.MatteBlock && bg === '#475569') res.contrast = 'poor'; // Gray on Gray
     if (obj === ObjectType.AluminumCan && !isDarkBg) res.contrast = 'poor'; // Silver on White/Gray
 
+    // 5. Technique & Geometry Check
+    // A. Blocking View Check
+    // If Position is Camera Axis, only Ring and Coaxial are physically valid without blocking view.
+    if (state.lightPosition === LightPosition.Camera) {
+        if (state.lightType !== LightFixture.Ring && state.lightType !== LightFixture.Coaxial) {
+            res.technique = 'wrong_geometry'; // "Light Blocking Camera"
+        }
+    }
+
+    // B. Goal Specific Logic (The "Vision Doctor" Truth Table)
+    // Only verify if we haven't already failed the geometry check
+    if (res.technique !== 'wrong_geometry') {
+        const goal = state.inspectionGoal;
+        const lightPos = state.lightPosition;
+
+        // Rules for Backlight requirements
+        if (goal.includes('Fill Level') || goal.includes('Dimensions (Backlight)')) {
+            if (lightPos !== LightPosition.Back) {
+                res.technique = 'wrong_geometry'; // Should be 'wrong_technique' but using existing status logic
+                // Override technically to 'poor' for simpler UI handling or map specific string
+            }
+        }
+        // Rules against Backlight (Surface inspections)
+        else if (goal.includes('Etched Text') || goal.includes('Solder Bridges') || goal.includes('Surface Flatness') || goal.includes('Label Text') || goal.includes('Dot Peen')) {
+             if (lightPos === LightPosition.Back) {
+                 res.technique = 'poor';
+             }
+             // Prefer Low Angle for Etched/Dot Peen
+             if ((goal.includes('Etched Text') || goal.includes('Dot Peen')) && lightPos !== LightPosition.LowAngle && state.lightType !== LightFixture.Coaxial) {
+                  res.technique = 'acceptable'; // Not ideal
+             }
+        }
+    }
+
     return res;
   }, [state, metrics]);
 
@@ -171,6 +206,8 @@ const App: React.FC = () => {
           case 'poor': return t.valPoor;
           case 'dark': return t.valDark;
           case 'bright': return t.valBright;
+          case 'wrong_geometry': return t.valWrongGeo;
+          case 'wrong_technique': return t.valWrongTech;
           default: return val;
       }
   }
@@ -286,6 +323,12 @@ const App: React.FC = () => {
                       <span className="text-slate-300">{t.valExposure}</span>
                       <div className="flex items-center gap-1 capitalize text-xs">
                         {validation.exposure === 'good' ? getStatusIcon('good') : getStatusIcon('poor')} {getTranslatedValidation(validation.exposure)}
+                      </div>
+                   </div>
+                   <div className="flex items-center justify-between gap-4 col-span-2 border-t border-slate-700 pt-1 mt-1">
+                      <span className="text-slate-300">{t.valTechnique}</span>
+                      <div className="flex items-center gap-1 capitalize text-xs">
+                        {validation.technique === 'good' ? getStatusIcon('good') : getStatusIcon('poor')} {getTranslatedValidation(validation.technique)}
                       </div>
                    </div>
                 </div>

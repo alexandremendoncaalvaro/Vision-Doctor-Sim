@@ -116,6 +116,7 @@ export interface ValidationResult {
   contrast: 'good' | 'poor';
   stability: 'good' | 'acceptable' | 'poor';
   exposure: 'good' | 'dark' | 'bright';
+  technique: 'good' | 'acceptable' | 'poor' | 'wrong_geometry'; // New check for lighting logic
 }
 
 export interface DoctorAdvice {

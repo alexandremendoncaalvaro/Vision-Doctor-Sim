@@ -117,11 +117,14 @@ export const TEXTS = {
     valStability: "Estabilidade",
     valContrast: "Contraste",
     valExposure: "Exposição",
+    valTechnique: "Técnica",
     valGood: "Bom",
     valAcceptable: "Aceitável",
     valPoor: "Ruim",
     valDark: "Escuro",
-    valBright: "Claro"
+    valBright: "Claro",
+    valWrongGeo: "Luz Bloqueando Câmera",
+    valWrongTech: "Técnica Incorreta"
   },
   'en': {
     appTitle: "Vision Doctor Simulator",
@@ -228,11 +231,14 @@ export const TEXTS = {
     valStability: "Stability",
     valContrast: "Contrast",
     valExposure: "Exposure",
+    valTechnique: "Technique",
     valGood: "Good",
     valAcceptable: "Acceptable",
     valPoor: "Poor",
     valDark: "Dark",
-    valBright: "Bright"
+    valBright: "Bright",
+    valWrongGeo: "Light Blocking Camera",
+    valWrongTech: "Wrong Technique"
   },
   'es': {
     appTitle: "Simulador Vision Doctor",
@@ -339,11 +345,14 @@ export const TEXTS = {
     valStability: "Estabilidad",
     valContrast: "Contraste",
     valExposure: "Exposición",
+    valTechnique: "Técnica",
     valGood: "Bueno",
     valAcceptable: "Aceptable",
     valPoor: "Malo",
     valDark: "Oscuro",
-    valBright: "Brillante"
+    valBright: "Brillante",
+    valWrongGeo: "Luz Bloquea Cámara",
+    valWrongTech: "Técnica Incorrecta"
   }
 };
 
