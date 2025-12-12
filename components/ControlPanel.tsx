@@ -11,7 +11,8 @@ import {
 } from '../types';
 import { STANDARD_FOCAL_LENGTHS, STANDARD_APERTURES, OBJECT_GOALS } from '../constants';
 import { TEXTS, GOAL_TRANSLATIONS } from '../translations';
-import { Camera, Lightbulb, Box, Activity, Target, RotateCw, Wind, Palette, Scan, Signal, Eye, Move3d } from 'lucide-react';
+import { getPreset } from '../presets';
+import { Camera, Lightbulb, Box, Activity, Target, RotateCw, Wind, Palette, Scan, Signal, Eye, Move3d, Wand2 } from 'lucide-react';
 
 interface ControlPanelProps {
   state: SimulationState;
@@ -34,6 +35,13 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
       objectType: type,
       inspectionGoal: OBJECT_GOALS[type][0]
     });
+  };
+
+  const handleAutoTune = () => {
+    const preset = getPreset(state.objectType, state.inspectionGoal);
+    if (preset) {
+      onChange(preset);
+    }
   };
 
   const backgroundOptions = [
@@ -92,6 +100,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ state, onChange, onAnalyze,
               ))}
             </select>
           </div>
+
+          <button
+            onClick={handleAutoTune}
+            className="w-full mt-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-semibold py-2 px-3 rounded flex items-center justify-center gap-2 shadow-md transition-all border border-white/10"
+            title={t.autoTuneDesc}
+          >
+            <Wand2 size={14} /> {t.autoTune}
+          </button>
         </section>
 
         {/* View & Orientation */}

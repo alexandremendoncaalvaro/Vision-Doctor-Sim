@@ -36,6 +36,8 @@ export const TEXTS = {
     // Actions
     analyzeBtn: "Consultar Doctor AI",
     analyzing: "Analisando...",
+    autoTune: "Auto-Configurar",
+    autoTuneDesc: "Aplicar configurações recomendadas para este objetivo",
 
     // Dropdown Options
     objects: {
@@ -141,6 +143,8 @@ export const TEXTS = {
     roiSize: "ROI Size",
     analyzeBtn: "Ask Doctor AI",
     analyzing: "Analyzing...",
+    autoTune: "Auto-Tune",
+    autoTuneDesc: "Apply recommended settings for this goal",
     objects: {
       "PCB Board": "PCB Board",
       "Glass Bottle (Amber)": "Glass Bottle (Amber)",
@@ -228,6 +232,8 @@ export const TEXTS = {
     roiSize: "Tamaño de ROI",
     analyzeBtn: "Consultar Doctor AI",
     analyzing: "Analizando...",
+    autoTune: "Auto-Ajustar",
+    autoTuneDesc: "Aplicar configuraciones recomendadas para este objetivo",
     objects: {
       "PCB Board": "Placa PCB",
       "Glass Bottle (Amber)": "Botella de Vidrio (Ámbar)",
