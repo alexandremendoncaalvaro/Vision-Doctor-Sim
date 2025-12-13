@@ -1,6 +1,8 @@
 
 export type Language = 'pt-BR' | 'en' | 'es';
 
+export type ActiveSection = 'all' | 'object' | 'light' | 'camera' | 'environment';
+
 export enum SensorFormat {
   Type_1_3 = "1/3\"",
   Type_1_2 = "1/2\"",
@@ -11,21 +13,21 @@ export enum SensorFormat {
 }
 
 export enum LightColor {
-  White = "White",
-  Red = "Red",
-  Blue = "Blue",
-  IR = "Infrared",
-  UV = "UV"
+  White = "White (CRI High)",
+  Red = "Red (630nm)",
+  Blue = "Blue (470nm)",
+  IR = "Infrared (850nm)",
+  UV = "UV (365nm)"
 }
 
 export enum LightFixture {
-  Ring = "Ring Light",
-  Bar = "Bar Light",
-  Spot = "Spot Light",
   Panel = "Backlight Panel",
-  Coaxial = "Coaxial",
-  Dome = "Dome (Cloudy Day)",
-  Tunnel = "Tunnel (Flat Dome)"
+  Bar = "Bar Light",
+  Ring = "Ring Light",
+  Spot = "Spot Light",
+  Coaxial = "Coaxial Light",
+  Dome = "Dome Light",
+  Tunnel = "Tunnel Light"
 }
 
 export enum GlobalEnv {
@@ -34,14 +36,23 @@ export enum GlobalEnv {
   Sunlight = "Direct Sunlight"
 }
 
-// Simplified positions that make sense per fixture
+// Aligned with "Geometry" column of the Definitive Guide
 export enum LightPosition {
-  Camera = "Camera Axis (Bright Field)",
   Back = "Backlight (Silhouette)",
-  Top = "Top (Direct)",
-  Side = "Side (Oblique)",
-  LowAngle = "Low Angle (Dark Field)",
-  Surrounding = "Surrounding (Diffuse)" // For Dome/Tunnel
+  Camera = "Coaxial / Frontal (Bright Field)",
+  Top = "Top Direct (Bright Field)",
+  Side = "Side Directional (Shadow/Relief)",
+  LowAngle = "Grazing / Low Angle (Dark Field)",
+  Surrounding = "Surrounding (Diffuse)",
+  Multi = "Multi-Angle"
+}
+
+// Aligned with "Quality" column (Internal logic mostly, but useful for UI info)
+export enum LightQuality {
+  Hard = "Hard / Direct",
+  Diffuse = "Diffuse / Soft",
+  Collimated = "Collimated",
+  Polarized = "Polarized"
 }
 
 export enum LightConfig {
@@ -91,7 +102,7 @@ export interface SimulationState {
   aperture: number; // f-stop
   workingDistance: number; // mm
   cameraAngle: number; // degrees
-  lensFilter: LensFilter; // New Property
+  lensFilter: LensFilter; 
   
   // Scene
   objectType: ObjectType;
@@ -110,7 +121,7 @@ export interface SimulationState {
   // Lighting
   lightType: LightFixture; 
   lightPosition: LightPosition; 
-  lightConfig: LightConfig; // Size/Arrangement
+  lightConfig: LightConfig; 
   lightDistance: number; // mm (Distance from object center)
   lightColor: LightColor;
   lightIntensity: number; // 0-100
@@ -151,13 +162,14 @@ export interface OpticalMetrics {
 
 export interface ValidationResult {
   roi: 'good' | 'acceptable' | 'poor';
-  resolution: 'good' | 'acceptable' | 'poor'; // New: Pixel Density
-  focus: 'good' | 'shallow' | 'poor'; // New: Depth of Field
+  resolution: 'good' | 'acceptable' | 'poor'; 
+  focus: 'good' | 'shallow' | 'poor'; 
   contrast: 'good' | 'poor';
   stability: 'good' | 'acceptable' | 'poor';
   exposure: 'good' | 'dark' | 'bright';
-  glare: 'none' | 'warning'; // New: Polarizer/Reflection check
+  glare: 'none' | 'warning'; 
   technique: 'good' | 'acceptable' | 'poor' | 'wrong_geometry'; 
+  techniqueReason?: string; // Feedback message
 }
 
 export interface DoctorAdvice {

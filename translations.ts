@@ -1,6 +1,5 @@
 
-
-import { Language } from './types';
+import { Language, LightFixture, LightColor, GlobalEnv, ObjectType, LensFilter } from './types';
 
 export const GOAL_TRANSLATIONS: Record<string, Record<Language, string>> = {
   "Read Laser Etched Text (OCR)": {
@@ -74,7 +73,7 @@ export const TEXTS = {
     targetObject: "Objeto Alvo",
     inspectionGoal: "Objetivo da Inspeção",
     cameraFocus: "Foco da Câmera",
-    objOrientation: "Orientación do Objeto",
+    objOrientation: "Orientação do Objeto",
     sensorFormat: "Formato do Sensor",
     focalLength: "Distância Focal (mm)",
     aperture: "Abertura (f-stop)",
@@ -97,6 +96,7 @@ export const TEXTS = {
     roiSize: "Tamanho da ROI",
     globalEnv: "Ambiente Global",
     globalIntensity: "Intensidade Global",
+    lightQualityLabel: "Qualidade da Luz:",
 
     analyzeBtn: "",
     analyzing: "",
@@ -104,11 +104,11 @@ export const TEXTS = {
     autoTuneDesc: "Aplicar configuração recomendada completa para o cenário atual",
 
     objects: {
-      "PCB Board": "Placa PCB",
-      "Glass Bottle (Amber)": "Garrafa de Vidro (Âmbar)",
-      "Aluminum Can": "Lata de Alumínio",
-      "Matte Block": "Bloco Fosco",
-      "Bottle Cap": "Tampa de Garrafa"
+      [ObjectType.PCB]: "Placa PCB",
+      [ObjectType.GlassBottle]: "Garrafa de Vidro (Âmbar)",
+      [ObjectType.AluminumCan]: "Lata de Alumínio",
+      [ObjectType.MatteBlock]: "Bloco Fosco",
+      [ObjectType.BottleCap]: "Tampa de Garrafa"
     },
     focus: {
         Top: "Topo", Middle: "Meio", Bottom: "Fundo", Whole: "Inteiro"
@@ -117,13 +117,13 @@ export const TEXTS = {
         Front: "Frente", Side: "Lado", Back: "Trás", Top: "Topo", Bottom: "Baixo", Custom: "Personalizado (6-DOF)"
     },
     fixtures: {
-        "Ring Light": "Anel (Ring)",
-        "Bar Light": "Barra (Bar)",
-        "Spot Light": "Spot",
-        "Backlight Panel": "Painel (Backlight)",
-        "Coaxial": "Coaxial",
-        "Dome (Cloudy Day)": "Domo (Dome)",
-        "Tunnel (Flat Dome)": "Túnel (Flat Dome)"
+        [LightFixture.Ring]: "Anel (Ring)",
+        [LightFixture.Bar]: "Barra (Bar)",
+        [LightFixture.Spot]: "Spot",
+        [LightFixture.Panel]: "Painel (Backlight)",
+        [LightFixture.Coaxial]: "Coaxial",
+        [LightFixture.Dome]: "Domo (Dome)",
+        [LightFixture.Tunnel]: "Túnel (Flat Dome)"
     },
     positions: {
         "Camera Axis (Bright Field)": "Eixo Câmera (Campo Claro)",
@@ -144,12 +144,16 @@ export const TEXTS = {
         "Wide": "Foco Aberto"
     },
     colors: {
-        "White": "Branco", "Red": "Vermelho", "Blue": "Azul", "Infrared": "Infravermelho", "UV": "UV"
+        [LightColor.White]: "Branco (CRI Alto)",
+        [LightColor.Red]: "Vermelho (630nm)",
+        [LightColor.Blue]: "Azul (470nm)",
+        [LightColor.IR]: "Infravermelho (850nm)",
+        [LightColor.UV]: "UV (365nm)"
     },
     envs: {
-        "Studio (Dark Box)": "Estúdio (Caixa Escura)",
-        "Factory Floor": "Fábrica (Luz Fria)",
-        "Direct Sunlight": "Luz Solar (Direta)"
+        [GlobalEnv.Studio]: "Estúdio (Caixa Escura)",
+        [GlobalEnv.Factory]: "Fábrica (Luz Fria)",
+        [GlobalEnv.Sunlight]: "Luz Solar (Direta)"
     },
     patterns: {
         "Level 1 (Low)": "Baixa",
@@ -157,13 +161,24 @@ export const TEXTS = {
         "Level 3 (High)": "Alta"
     },
     filters: {
-        "None": "Nenhum",
-        "Polarizer (CPL)": "Polarizador (CPL)",
-        "Red Bandpass (630nm)": "Passa-Faixa Vermelho (Red)",
-        "Blue Bandpass (470nm)": "Passa-Faixa Azul (Blue)",
-        "Green Bandpass (525nm)": "Passa-Faixa Verde (Green)"
+        [LensFilter.None]: "Nenhum",
+        [LensFilter.Polarizer]: "Polarizador (CPL)",
+        [LensFilter.Red]: "Passa-Faixa Vermelho (Red)",
+        [LensFilter.Blue]: "Passa-Faixa Azul (Blue)",
+        [LensFilter.Green]: "Passa-Faixa Verde (Green)"
     },
     
+    // Light Quality Descriptions
+    qualityDesc: {
+      [LightFixture.Panel]: "Colimada / Difusa",
+      [LightFixture.Bar]: "Dura / Direcional",
+      [LightFixture.Ring]: "Dura (Direta)",
+      [LightFixture.Spot]: "Fonte Pontual Dura",
+      [LightFixture.Coaxial]: "Colimada / Uniforme",
+      [LightFixture.Dome]: "Suave / Difusa",
+      [LightFixture.Tunnel]: "Suave / Difusa"
+    },
+
     schematic: "Esquemático",
     simulator: "Simulador",
     cameraView: "Visão da Câmera",
@@ -178,6 +193,7 @@ export const TEXTS = {
     noReport: "",
     scenarioCheck: "Verificação de Cenário",
     
+    // Schematic Labels
     schCamera: "Câmera",
     schLens: "Lente",
     schObject: "Objeto",
@@ -185,10 +201,14 @@ export const TEXTS = {
     schLowAngle: "Ângulo Baixo",
     schCoaxial: "Coaxial",
     schWd: "DT",
+    schDarkFieldRing: "Anel Campo Escuro",
+    schDarkFieldBar: "Barra Campo Escuro",
+    schDomeTunnel: "Domo / Túnel",
+    schBarLight: "Barra de Luz",
     
-    statFov: "FOV (H x V)",
+    statFov: "FOV (L x A)",
     statMag: "Ampliação",
-    statDof: "Profundidad de Campo",
+    statDof: "Profundidade de Campo",
     
     hudSensor: "VISÃO DO SENSOR",
     hudWorld: "VISÃO DO MUNDO",
@@ -204,15 +224,27 @@ export const TEXTS = {
     valExposure: "Exposição",
     valGlare: "Reflexos (Glare)",
     valTechnique: "Técnica",
-    valGood: "Bom",
-    valAcceptable: "Aceitável",
-    valPoor: "Ruim",
-    valDark: "Escuro",
-    valBright: "Claro",
-    valShallow: "Raso",
-    valWarning: "Risco Alto",
-    valWrongGeo: "Luz Bloqueando Câmera",
-    valWrongTech: "Técnica Incorreta",
+    
+    // Validation Status
+    status: {
+       good: "Bom",
+       acceptable: "Aceitável",
+       poor: "Ruim",
+       dark: "Escuro",
+       bright: "Claro",
+       shallow: "Raso",
+       warning: "Risco Alto",
+       none: "Ok",
+       wrong_geometry: "Incorreto"
+    },
+    
+    // Validation Reasons
+    reasons: {
+       reqBacklight: "Objetivo requer Backlight (Silhueta).",
+       reqDarkfield: "Objetivo requer Luz Rasante (Campo Escuro).",
+       backlightWashout: "Backlight ofusca o texto da superfície.",
+       glareRisk: "Luz direta em metal causa reflexos excessivos."
+    },
 
     dofPos: "Pos",
     dofRot: "Rot"
@@ -251,17 +283,18 @@ export const TEXTS = {
     roiSize: "ROI Size",
     globalEnv: "Global Environment",
     globalIntensity: "Global Intensity",
+    lightQualityLabel: "Light Quality:",
 
     analyzeBtn: "",
     analyzing: "",
     autoTune: "Auto-Tune",
     autoTuneDesc: "Apply comprehensive recommended configuration",
     objects: {
-      "PCB Board": "PCB Board",
-      "Glass Bottle (Amber)": "Glass Bottle (Amber)",
-      "Aluminum Can": "Aluminum Can",
-      "Matte Block": "Matte Block",
-      "Bottle Cap": "Bottle Cap"
+      [ObjectType.PCB]: "PCB Board",
+      [ObjectType.GlassBottle]: "Glass Bottle (Amber)",
+      [ObjectType.AluminumCan]: "Aluminum Can",
+      [ObjectType.MatteBlock]: "Matte Block",
+      [ObjectType.BottleCap]: "Bottle Cap"
     },
     focus: {
         Top: "Top", Middle: "Middle", Bottom: "Bottom", Whole: "Whole"
@@ -270,13 +303,13 @@ export const TEXTS = {
         Front: "Front", Side: "Side", Back: "Back", Top: "Top", Bottom: "Bottom", Custom: "Custom (6-DOF)"
     },
     fixtures: {
-        "Ring Light": "Ring Light",
-        "Bar Light": "Bar Light",
-        "Spot Light": "Spot Light",
-        "Backlight Panel": "Backlight Panel",
-        "Coaxial": "Coaxial",
-        "Dome (Cloudy Day)": "Dome (Cloudy Day)",
-        "Tunnel (Flat Dome)": "Tunnel (Flat Dome)"
+        [LightFixture.Ring]: "Ring Light",
+        [LightFixture.Bar]: "Bar Light",
+        [LightFixture.Spot]: "Spot Light",
+        [LightFixture.Panel]: "Backlight Panel",
+        [LightFixture.Coaxial]: "Coaxial Light",
+        [LightFixture.Dome]: "Dome Light",
+        [LightFixture.Tunnel]: "Tunnel Light"
     },
     positions: {
         "Camera Axis (Bright Field)": "Camera Axis (Bright Field)",
@@ -297,12 +330,16 @@ export const TEXTS = {
         "Wide": "Wide Beam"
     },
     colors: {
-        "White": "White", "Red": "Red", "Blue": "Blue", "Infrared": "Infrared", "UV": "UV"
+        [LightColor.White]: "White (CRI High)",
+        [LightColor.Red]: "Red (630nm)",
+        [LightColor.Blue]: "Blue (470nm)",
+        [LightColor.IR]: "Infrared (850nm)",
+        [LightColor.UV]: "UV (365nm)"
     },
     envs: {
-        "Studio (Dark Box)": "Studio (Dark Box)",
-        "Factory Floor": "Factory Floor (Cool)",
-        "Direct Sunlight": "Direct Sunlight"
+        [GlobalEnv.Studio]: "Studio (Dark Box)",
+        [GlobalEnv.Factory]: "Factory Floor",
+        [GlobalEnv.Sunlight]: "Direct Sunlight"
     },
     patterns: {
         "Level 1 (Low)": "Level 1 (Low)",
@@ -310,12 +347,23 @@ export const TEXTS = {
         "Level 3 (High)": "Level 3 (High)"
     },
     filters: {
-        "None": "None",
-        "Polarizer (CPL)": "Polarizer (CPL)",
-        "Red Bandpass (630nm)": "Red Bandpass (630nm)",
-        "Blue Bandpass (470nm)": "Blue Bandpass (470nm)",
-        "Green Bandpass (525nm)": "Green Bandpass (525nm)"
+        [LensFilter.None]: "None",
+        [LensFilter.Polarizer]: "Polarizer (CPL)",
+        [LensFilter.Red]: "Red Bandpass (630nm)",
+        [LensFilter.Blue]: "Blue Bandpass (470nm)",
+        [LensFilter.Green]: "Green Bandpass (525nm)"
     },
+
+    qualityDesc: {
+      [LightFixture.Panel]: "Collimated / Diffuse",
+      [LightFixture.Bar]: "Hard / Directional",
+      [LightFixture.Ring]: "Hard (Direct)",
+      [LightFixture.Spot]: "Hard Point Source",
+      [LightFixture.Coaxial]: "Collimated / Uniform",
+      [LightFixture.Dome]: "Soft / Diffuse",
+      [LightFixture.Tunnel]: "Soft / Diffuse"
+    },
+
     schematic: "Schematic",
     simulator: "Simulator",
     cameraView: "Camera View",
@@ -328,6 +376,8 @@ export const TEXTS = {
     reportPoor: "Poor",
     noReport: "",
     scenarioCheck: "Scenario Check",
+    
+    // Schematic Labels
     schCamera: "Camera",
     schLens: "Lens",
     schObject: "Object",
@@ -335,6 +385,11 @@ export const TEXTS = {
     schLowAngle: "Low Angle",
     schCoaxial: "Coaxial",
     schWd: "WD",
+    schDarkFieldRing: "Dark Field Ring",
+    schDarkFieldBar: "Dark Field Bar",
+    schDomeTunnel: "Dome / Tunnel",
+    schBarLight: "Bar Light",
+
     statFov: "FOV (H x V)",
     statMag: "Magnification",
     statDof: "Depth of Field",
@@ -351,15 +406,28 @@ export const TEXTS = {
     valExposure: "Exposure",
     valGlare: "Glare (Reflections)",
     valTechnique: "Technique",
-    valGood: "Good",
-    valAcceptable: "Acceptable",
-    valPoor: "Poor",
-    valDark: "Dark",
-    valBright: "Bright",
-    valShallow: "Shallow",
-    valWarning: "High Risk",
-    valWrongGeo: "Light Blocking Camera",
-    valWrongTech: "Wrong Technique",
+
+    // Validation Status
+    status: {
+       good: "Good",
+       acceptable: "Acceptable",
+       poor: "Poor",
+       dark: "Dark",
+       bright: "Bright",
+       shallow: "Shallow",
+       warning: "High Risk",
+       none: "Ok",
+       wrong_geometry: "Incorrect"
+    },
+    
+    // Validation Reasons
+    reasons: {
+       reqBacklight: "Goal requires Backlight (Silhouette).",
+       reqDarkfield: "Goal requires Grazing Light (Dark Field).",
+       backlightWashout: "Backlight washes out surface text.",
+       glareRisk: "Direct light on metal causes excessive glare."
+    },
+
     dofPos: "Pos",
     dofRot: "Rot"
   },
@@ -397,16 +465,18 @@ export const TEXTS = {
     roiSize: "Tamaño de ROI",
     globalEnv: "Entorno Global",
     globalIntensity: "Intensidad Global",
+    lightQualityLabel: "Calidad de Luz:",
+
     analyzeBtn: "",
     analyzing: "",
     autoTune: "Auto-Ajustar",
     autoTuneDesc: "Aplicar configuración completa recomendada",
     objects: {
-      "PCB Board": "Placa PCB",
-      "Glass Bottle (Amber)": "Botella de Vidrio (Ámbar)",
-      "Aluminum Can": "Lata de Aluminio",
-      "Matte Block": "Bloque Mate",
-      "Bottle Cap": "Tapa de Botella"
+      [ObjectType.PCB]: "Placa PCB",
+      [ObjectType.GlassBottle]: "Botella de Vidrio (Ámbar)",
+      [ObjectType.AluminumCan]: "Lata de Aluminio",
+      [ObjectType.MatteBlock]: "Bloque Mate",
+      [ObjectType.BottleCap]: "Tapa de Botella"
     },
     focus: {
         Top: "Superior", Middle: "Medio", Bottom: "Inferior", Whole: "Entero"
@@ -415,13 +485,13 @@ export const TEXTS = {
         Front: "Frente", Side: "Lado", Back: "Atrás", Top: "Superior", Bottom: "Inferior", Custom: "Personalizado (6-DOF)"
     },
     fixtures: {
-        "Ring Light": "Anillo (Ring)",
-        "Bar Light": "Barra (Bar)",
-        "Spot Light": "Spot",
-        "Backlight Panel": "Panel (Luz Trasera)",
-        "Coaxial": "Coaxial",
-        "Dome (Cloudy Day)": "Domo (Dome)",
-        "Tunnel (Flat Dome)": "Túnel (Flat Dome)"
+        [LightFixture.Ring]: "Anillo (Ring)",
+        [LightFixture.Bar]: "Barra (Bar)",
+        [LightFixture.Spot]: "Spot",
+        [LightFixture.Panel]: "Panel (Luz Trasera)",
+        [LightFixture.Coaxial]: "Coaxial",
+        [LightFixture.Dome]: "Domo (Dome)",
+        [LightFixture.Tunnel]: "Túnel (Flat Dome)"
     },
     positions: {
         "Camera Axis (Bright Field)": "Eje de Cámara (Campo Claro)",
@@ -442,12 +512,16 @@ export const TEXTS = {
         "Wide": "Haz Ancho"
     },
     colors: {
-        "White": "Blanco", "Red": "Rojo", "Blue": "Azul", "Infrared": "Infrarrojo", "UV": "UV"
+        [LightColor.White]: "Blanco (CRI Alto)",
+        [LightColor.Red]: "Rojo (630nm)",
+        [LightColor.Blue]: "Azul (470nm)",
+        [LightColor.IR]: "Infrarrojo (850nm)",
+        [LightColor.UV]: "UV (365nm)"
     },
     envs: {
-        "Studio (Dark Box)": "Estudio (Caja Oscura)",
-        "Factory Floor": "Fábrica (Luz Fría)",
-        "Direct Sunlight": "Luz Solar (Directa)"
+        [GlobalEnv.Studio]: "Estudio (Caja Oscura)",
+        [GlobalEnv.Factory]: "Fábrica (Luz Fría)",
+        [GlobalEnv.Sunlight]: "Luz Solar (Directa)"
     },
     patterns: {
         "Level 1 (Low)": "Bajo",
@@ -455,12 +529,23 @@ export const TEXTS = {
         "Level 3 (High)": "Alto"
     },
     filters: {
-        "None": "Ninguno",
-        "Polarizer (CPL)": "Polarizador (CPL)",
-        "Red Bandpass (630nm)": "Paso de Banda Rojo",
-        "Blue Bandpass (470nm)": "Paso de Banda Azul",
-        "Green Bandpass (525nm)": "Paso de Banda Verde"
+        [LensFilter.None]: "Ninguno",
+        [LensFilter.Polarizer]: "Polarizador (CPL)",
+        [LensFilter.Red]: "Paso de Banda Rojo",
+        [LensFilter.Blue]: "Paso de Banda Azul",
+        [LensFilter.Green]: "Paso de Banda Verde"
     },
+
+    qualityDesc: {
+      [LightFixture.Panel]: "Colimada / Difusa",
+      [LightFixture.Bar]: "Dura / Direccional",
+      [LightFixture.Ring]: "Dura (Directa)",
+      [LightFixture.Spot]: "Fuente Puntual Dura",
+      [LightFixture.Coaxial]: "Colimada / Uniforme",
+      [LightFixture.Dome]: "Suave / Difusa",
+      [LightFixture.Tunnel]: "Suave / Difusa"
+    },
+
     schematic: "Esquemático",
     simulator: "Simulador",
     cameraView: "Vista de Cámara",
@@ -473,6 +558,8 @@ export const TEXTS = {
     reportPoor: "Pobre",
     noReport: "",
     scenarioCheck: "Verificación de Escenario",
+    
+    // Schematic Labels
     schCamera: "Cámara",
     schLens: "Lente",
     schObject: "Objeto",
@@ -480,7 +567,12 @@ export const TEXTS = {
     schLowAngle: "Bajo Ángulo",
     schCoaxial: "Coaxial",
     schWd: "DT",
-    statFov: "FOV (H x V)",
+    schDarkFieldRing: "Anillo Campo Oscuro",
+    schDarkFieldBar: "Barra Campo Oscuro",
+    schDomeTunnel: "Domo / Túnel",
+    schBarLight: "Barra de Luz",
+
+    statFov: "FOV (L x A)",
     statMag: "Aumento",
     statDof: "Profundidad de Campo",
     hudSensor: "VISTA DEL SENSOR",
@@ -496,15 +588,28 @@ export const TEXTS = {
     valExposure: "Exposición",
     valGlare: "Reflejos (Glare)",
     valTechnique: "Técnica",
-    valGood: "Bueno",
-    valAcceptable: "Aceptable",
-    valPoor: "Malo",
-    valDark: "Oscuro",
-    valBright: "Brillante",
-    valShallow: "Poco Profundo",
-    valWarning: "Riesgo Alto",
-    valWrongGeo: "Luz Bloquea Cámara",
-    valWrongTech: "Técnica Incorrecta",
+    
+    // Validation Status
+    status: {
+       good: "Bueno",
+       acceptable: "Aceptable",
+       poor: "Malo",
+       dark: "Oscuro",
+       bright: "Brillante",
+       shallow: "Poco Profundo",
+       warning: "Riesgo Alto",
+       none: "Ok",
+       wrong_geometry: "Incorrecto"
+    },
+    
+    // Validation Reasons
+    reasons: {
+       reqBacklight: "Objetivo requiere Luz Trasera (Silueta).",
+       reqDarkfield: "Objetivo requiere Luz Rasante (Campo Oscuro).",
+       backlightWashout: "Luz Trasera apaga el texto de la superficie.",
+       glareRisk: "Luz directa en metal causa reflejos excesivos."
+    },
+
     dofPos: "Pos",
     dofRot: "Rot"
   }

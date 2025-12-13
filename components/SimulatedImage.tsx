@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { SimulationState, OpticalMetrics, LightColor, LightFixture, LightPosition, LightConfig, ObjectType, Language, GlobalEnv, BackgroundPattern, LensFilter } from '../types';
+import { SimulationState, OpticalMetrics, LightColor, LightFixture, LightPosition, LightConfig, ObjectType, Language, GlobalEnv, BackgroundPattern, LensFilter, ActiveSection } from '../types';
 import { OBJECT_DIMS } from '../constants';
 import { TEXTS } from '../translations';
 
@@ -11,9 +11,10 @@ interface SimulatedImageProps {
   metrics: OpticalMetrics;
   viewType: 'camera' | 'free';
   language: Language;
+  onSectionSelect: (section: ActiveSection) => void;
 }
 
-const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewType, language }) => {
+const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewType, language, onSectionSelect }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const t = TEXTS[language];
   
@@ -40,6 +41,10 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
   const objectGroupRef = useRef<THREE.Group | null>(null);
   const camModelRef = useRef<THREE.Group | null>(null);
   const enclosureGroupRef = useRef<THREE.Group | null>(null);
+  
+  // Raycaster Ref
+  const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster());
+  const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2());
 
   useEffect(() => {
     viewTypeRef.current = viewType;
@@ -56,6 +61,66 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, []);
+
+  // --- INTERACTION HANDLER ---
+  const handleCanvasClick = (event: React.MouseEvent) => {
+    if (!containerRef.current || !rendererRef.current || !sceneRef.current) return;
+    
+    // Calculate mouse position in normalized device coordinates (-1 to +1)
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    mouseRef.current.set(x, y);
+
+    const activeCam = viewTypeRef.current === 'free' ? freeCameraRef.current : cameraRef.current;
+    if (!activeCam) return;
+
+    raycasterRef.current.setFromCamera(mouseRef.current, activeCam);
+
+    const intersects = raycasterRef.current.intersectObjects(sceneRef.current.children, true);
+
+    if (intersects.length > 0) {
+      // Find the first relevant object
+      const hit = intersects[0].object;
+      
+      // Traverse up to find the group logic
+      let current: THREE.Object3D | null = hit;
+      let sectionFound: ActiveSection | null = null;
+
+      while (current) {
+        if (current === objectGroupRef.current) {
+          sectionFound = 'object';
+          break;
+        }
+        if (current === lightsGroupRef.current) {
+           sectionFound = 'light';
+           break;
+        }
+        if (current === camModelRef.current) {
+          sectionFound = 'camera';
+          break;
+        }
+        if (current === enclosureGroupRef.current) {
+           sectionFound = 'environment';
+           break;
+        }
+        current = current.parent;
+      }
+      
+      // Special logic: If hitting environment wall, maybe we want "all" or "environment". 
+      // User requested "Show all" when clicking canvas (background). 
+      // If we hit object/light/camera, select that. Otherwise, select 'all'.
+      if (sectionFound && sectionFound !== 'environment') {
+          onSectionSelect(sectionFound);
+      } else {
+          // If we hit the enclosure (background) or environment props, go back to all
+          onSectionSelect('all');
+      }
+
+    } else {
+        onSectionSelect('all');
+    }
+  };
 
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -101,6 +166,7 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
 
     // --- ENCLOSURE GROUP ---
     const enclosureGroup = new THREE.Group();
+    enclosureGroup.name = "EnvironmentGroup";
     scene.add(enclosureGroup);
     enclosureGroupRef.current = enclosureGroup;
 
@@ -130,14 +196,17 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
     enclosureGroup.add(grid);
 
     const lightsGroup = new THREE.Group();
+    lightsGroup.name = "LightsGroup";
     scene.add(lightsGroup);
     lightsGroupRef.current = lightsGroup;
 
     const objectGroup = new THREE.Group();
+    objectGroup.name = "ObjectGroup";
     scene.add(objectGroup);
     objectGroupRef.current = objectGroup;
 
     const camModel = createCameraModel();
+    camModel.name = "CameraModel";
     scene.add(camModel);
     camModelRef.current = camModel;
 
@@ -388,7 +457,12 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
   }, [metrics]);
 
   return (
-    <div className="w-full h-full relative bg-black group outline-none overflow-hidden" tabIndex={0}>
+    <div 
+      className="w-full h-full relative bg-black group outline-none overflow-hidden cursor-crosshair" 
+      tabIndex={0}
+      onClick={handleCanvasClick}
+      title={viewType === 'free' ? "Click on objects to edit settings" : "Click to view settings"}
+    >
       
       <svg className="absolute w-0 h-0">
         <defs>
@@ -452,7 +526,189 @@ const SimulatedImage: React.FC<SimulatedImageProps> = ({ state, metrics, viewTyp
   );
 };
 
-// --- PROCEDURAL TEXTURE GENERATION (ABSTRACT NOISE) ---
+// ==========================================
+// TEXTURE GENERATION HELPERS
+// ==========================================
+
+// Helper to create bump maps for text (Embossed/Debossed)
+function createHeightMapTexture(
+  drawCallback: (ctx: CanvasRenderingContext2D, w: number, h: number) => void
+): THREE.Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+      // Base Grey (Mid-point)
+      ctx.fillStyle = '#808080';
+      ctx.fillRect(0, 0, 512, 512);
+      drawCallback(ctx, 512, 512);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.NoColorSpace; // Important for bump/normal maps
+  return tex;
+}
+
+// Helper to create Albedo maps (Color)
+function createAlbedoTexture(
+    drawCallback: (ctx: CanvasRenderingContext2D, w: number, h: number) => void
+  ): THREE.Texture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+        ctx.fillStyle = '#94a3b8'; // Base material color
+        ctx.fillRect(0, 0, 512, 512);
+        drawCallback(ctx, 512, 512);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+}
+
+function createEmbossedTexture(): THREE.Texture {
+    return createHeightMapTexture((ctx, w, h) => {
+        // Lighter than grey = Raised
+        ctx.fillStyle = '#e0e0e0'; 
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        ctx.font = 'bold 80px Arial';
+        ctx.fillText('VISION', w/2, h*0.3);
+
+        ctx.font = 'bold 120px Arial';
+        ctx.fillText('1.0', w/2, h*0.55);
+
+        ctx.font = 'bold 60px Arial';
+        ctx.fillText('SERIES A', w/2, h*0.8);
+        
+        // Frame
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = '#c0c0c0';
+        ctx.strokeRect(20, 20, w-40, h-40);
+    });
+}
+
+function createDebossedTexture(): THREE.Texture {
+    return createHeightMapTexture((ctx, w, h) => {
+        // Darker than grey = Sunken
+        ctx.fillStyle = '#303030';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        ctx.font = 'bold 100px Arial';
+        ctx.fillText('QC', w/2, h*0.35);
+
+        ctx.font = 'bold 60px Arial';
+        ctx.fillText('PASSED', w/2, h*0.6);
+        
+        // Deep groove lines
+        ctx.strokeStyle = '#202020';
+        ctx.lineWidth = 15;
+        ctx.beginPath();
+        ctx.moveTo(50, h*0.8);
+        ctx.lineTo(w-50, h*0.8);
+        ctx.stroke();
+    });
+}
+
+function createMixedTexture(): THREE.Texture {
+    return createHeightMapTexture((ctx, w, h) => {
+        // Raised (White)
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(w*0.3, h*0.3, 60, 0, Math.PI*2);
+        ctx.fill();
+
+        // Sunken (Black)
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(w*0.5, h*0.5, 120, 120);
+        
+        // Raised Text
+        ctx.fillStyle = '#e0e0e0';
+        ctx.font = 'bold 60px Arial';
+        ctx.fillText('MIXED', 100, h*0.8);
+    });
+}
+
+function createScratchesTexture(): THREE.Texture {
+    return createHeightMapTexture((ctx, w, h) => {
+        ctx.strokeStyle = '#a0a0a0'; // Slight raise (burr)
+        ctx.lineWidth = 1;
+        for(let i=0; i<30; i++) {
+            ctx.beginPath();
+            ctx.moveTo(Math.random()*w, Math.random()*h);
+            ctx.bezierCurveTo(Math.random()*w, Math.random()*h, Math.random()*w, Math.random()*h, Math.random()*w, Math.random()*h);
+            ctx.stroke();
+        }
+        
+        ctx.strokeStyle = '#404040'; // Deep scratch
+        ctx.lineWidth = 2;
+        for(let i=0; i<10; i++) {
+            ctx.beginPath();
+            ctx.moveTo(Math.random()*w, Math.random()*h);
+            ctx.lineTo(Math.random()*w, Math.random()*h);
+            ctx.stroke();
+        }
+    });
+}
+
+function createDotMatrixTexture(): THREE.Texture {
+    return createAlbedoTexture((ctx, w, h) => {
+        ctx.fillStyle = '#111111'; // Black Ink
+        
+        // Helper to simulate dot matrix text
+        const drawDotText = (text: string, x: number, y: number, scale: number) => {
+            const fontMap: any = {
+                'L': [[0,0],[0,1],[0,2],[0,3],[0,4],[1,4],[2,4]],
+                'O': [[1,0],[2,0],[0,1],[3,1],[0,2],[3,2],[0,3],[3,3],[1,4],[2,4]],
+                'T': [[0,0],[1,0],[2,0],[1,1],[1,2],[1,3],[1,4]],
+                'E': [[0,0],[1,0],[2,0],[0,1],[0,2],[1,2],[0,3],[0,4],[1,4],[2,4]],
+                ':': [[1,1],[1,3]],
+                ' ': [],
+                '2': [[0,0],[1,0],[2,0],[2,1],[2,2],[1,2],[0,2],[0,3],[0,4],[1,4],[2,4]],
+                '4': [[0,0],[0,1],[0,2],[1,2],[2,0],[2,1],[2,2],[2,3],[2,4]],
+                '/': [[3,0],[2,1],[1,2],[0,3]],
+                '1': [[1,0],[0,1],[1,1],[1,2],[1,3],[0,4],[1,4],[2,4]],
+                '0': [[1,0],[2,0],[0,1],[3,1],[0,2],[3,2],[0,3],[3,3],[1,4],[2,4]],
+                'V': [[0,0],[0,1],[0,2],[1,3],[2,4],[3,3],[4,2],[4,1],[4,0]],
+                'A': [[1,0],[2,0],[0,1],[3,1],[0,2],[1,2],[2,2],[3,2],[0,3],[3,3],[0,4],[3,4]],
+                '8': [[1,0],[2,0],[0,1],[3,1],[1,2],[2,2],[0,3],[3,3],[1,4],[2,4]],
+            };
+            
+            let cursorX = x;
+            
+            for(let i=0; i<text.length; i++) {
+                const char = text[i].toUpperCase();
+                const points = fontMap[char] || []; // Fallback empty
+                
+                points.forEach((p: number[]) => {
+                    ctx.beginPath();
+                    ctx.arc(cursorX + p[0]*scale, y + p[1]*scale, scale*0.45, 0, Math.PI*2);
+                    ctx.fill();
+                });
+                cursorX += scale * 5; // Spacing
+            }
+        };
+        
+        // Calculate appropriate scale and position to fit within width (512)
+        // With scale 8, charWidth is 40. "LOTE: 24/10" is 11 chars => 440px. Fits with margins.
+        const scale = 8;
+        const charWidth = 5 * scale;
+        
+        const text1 = "LOTE: 24/10";
+        const width1 = text1.length * charWidth;
+        const x1 = (w - width1) / 2;
+        
+        const text2 = "VAL: 2028";
+        const width2 = text2.length * charWidth;
+        const x2 = (w - width2) / 2;
+
+        drawDotText(text1, x1, 150, scale);
+        drawDotText(text2, x2, 300, scale);
+    });
+}
 
 // Level 1: Low (Chromatic Grain / RGB Noise)
 function createLevel1Texture(): THREE.CanvasTexture {
@@ -461,11 +717,8 @@ function createLevel1Texture(): THREE.CanvasTexture {
     canvas.height = 512;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-        // Base dark gray
         ctx.fillStyle = '#222';
         ctx.fillRect(0,0,512,512);
-
-        // Chromatic noise
         for(let i=0; i<30000; i++) {
            const r = Math.floor(Math.random() * 150);
            const g = Math.floor(Math.random() * 150);
@@ -484,20 +737,13 @@ function createLevel2Texture(): THREE.CanvasTexture {
     canvas.height = 512;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-         // Base dark
          ctx.fillStyle = '#1a1a1a';
          ctx.fillRect(0,0,512,512);
-
-         // Industrial Palette Clutter (Browns, Yellows, Blues, Grays)
          const colors = ['#8b4513', '#cd853f', '#eebb00', '#4682b4', '#708090', '#556b2f'];
-
-         // Random Blocks/Shapes
          for(let i=0; i<40; i++) {
              ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
              ctx.fillRect(Math.random()*512, Math.random()*512, 20 + Math.random()*100, 20 + Math.random()*100);
          }
-
-         // Overlays for depth
          ctx.fillStyle = 'rgba(0,0,0,0.3)';
          for(let i=0; i<10; i++) {
              ctx.fillRect(Math.random()*512, 0, Math.random()*50, 512);
@@ -513,20 +759,14 @@ function createLevel3Texture(): THREE.CanvasTexture {
     canvas.height = 512;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-        // Black base
         ctx.fillStyle = '#000';
         ctx.fillRect(0,0,512,512);
-        
-        // High saturation confetti / interference
         for(let i=0; i<2000; i++) {
-             // Random bright colors
              const hue = Math.floor(Math.random() * 360);
              ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
              const s = 2 + Math.random() * 6;
              ctx.fillRect(Math.random()*512, Math.random()*512, s, s);
         }
-
-        // Random chaotic lines
         ctx.lineWidth = 2;
         for(let i=0; i<30; i++) {
             const hue = Math.floor(Math.random() * 360);
@@ -536,8 +776,6 @@ function createLevel3Texture(): THREE.CanvasTexture {
             ctx.lineTo(Math.random()*512, Math.random()*512);
             ctx.stroke();
         }
-
-        // Large interfering blobs
         for(let i=0; i<5; i++) {
             const hue = Math.floor(Math.random() * 360);
             ctx.fillStyle = `hsla(${hue}, 100%, 50%, 0.2)`;
@@ -551,8 +789,6 @@ function createLevel3Texture(): THREE.CanvasTexture {
     }
     return new THREE.CanvasTexture(canvas);
 }
-
-// --- HELPERS ---
 
 function getLightColorHex(c: LightColor): number {
   switch(c) {
@@ -584,7 +820,6 @@ function createCameraModel(): THREE.Group {
   const glass = new THREE.Mesh(glassGeo, glassMat);
   glass.position.z = 30;
   glass.rotation.x = Math.PI / 2;
-  // glass.lookAt(0,0,100);
   group.add(glass);
   return group;
 }
@@ -699,8 +934,6 @@ function createCrownCapTexture(color: string): THREE.Texture {
 function createRealisticCrownCap(radius: number): THREE.Group {
   const group = new THREE.Group();
   const topHeight = radius * 0.15;
-  
-  // Top
   const topGeo = new THREE.CylinderGeometry(radius, radius, topHeight, 32);
   const topMat = new THREE.MeshStandardMaterial({ 
       map: createCrownCapTexture('#dc2626'),
@@ -714,11 +947,10 @@ function createRealisticCrownCap(radius: number): THREE.Group {
   top.castShadow = true;
   group.add(top);
 
-  // Skirt (simplified crimps)
   const skirtHeight = radius * 0.3;
   const skirtGeo = new THREE.CylinderGeometry(radius, radius * 1.05, skirtHeight, 21, 1, true);
   const skirtMat = new THREE.MeshStandardMaterial({ 
-      color: 0xdca5a5, // slightly reddish metal
+      color: 0xdca5a5, 
       roughness: 0.4, 
       metalness: 0.7,
       side: THREE.DoubleSide
@@ -728,7 +960,6 @@ function createRealisticCrownCap(radius: number): THREE.Group {
   skirt.receiveShadow = true;
   skirt.castShadow = true;
   group.add(skirt);
-  
   return group;
 }
 
@@ -746,28 +977,20 @@ function updateObject(group: THREE.Group, state: SimulationState) {
     }
   }
 
-  // Handle Rotation
   group.rotation.set(0,0,0);
   
   if (orientation === 'Custom') {
-     // Apply full 6-DOF
      group.position.set(state.objectShiftX, state.objectShiftY, state.objectShiftZ);
-     
-     // Convert Degrees to Radians
      const rx = (state.objectRotX * Math.PI) / 180;
      const ry = (state.objectRotY * Math.PI) / 180;
      const rz = (state.objectRotZ * Math.PI) / 180;
-     
      group.rotation.set(rx, ry, rz);
   } else {
-     // Standard Presets - RESET Position to center
      group.position.set(0,0,0);
-
      if (orientation === 'Side') group.rotation.y = -Math.PI / 2;
      else if (orientation === 'Back') group.rotation.y = Math.PI;
      else if (orientation === 'Top') group.rotation.x = Math.PI / 2; 
      else if (orientation === 'Bottom') group.rotation.x = -Math.PI / 2;
-     // Front is default 0,0,0
   }
 
   const setShadows = (mesh: THREE.Object3D) => {
@@ -778,7 +1001,7 @@ function updateObject(group: THREE.Group, state: SimulationState) {
   const dim = OBJECT_DIMS[type];
 
   if (type === ObjectType.PCB) {
-     const board = new THREE.Mesh(new THREE.BoxGeometry(dim.w, dim.h, dim.depth), new THREE.MeshStandardMaterial({ color: 0x1a472a, roughness: 0.7 })); // Roughness 0.5 -> 0.7
+     const board = new THREE.Mesh(new THREE.BoxGeometry(dim.w, dim.h, dim.depth), new THREE.MeshStandardMaterial({ color: 0x1a472a, roughness: 0.7 })); 
      setShadows(board);
      group.add(board);
      const chip = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 3), new THREE.MeshStandardMaterial({ color: 0x111111 }));
@@ -789,7 +1012,7 @@ function updateObject(group: THREE.Group, state: SimulationState) {
      const labelGeo = new THREE.PlaneGeometry(16, 16);
      const labelMat = new THREE.MeshStandardMaterial({ 
          map: createEtchedTexture(),
-         roughness: 0.8, // Increased roughness to prevent glare on text
+         roughness: 0.8, 
          metalness: 0.2,
          polygonOffset: true,
          polygonOffsetFactor: -1
@@ -799,7 +1022,7 @@ function updateObject(group: THREE.Group, state: SimulationState) {
      label.receiveShadow = true; 
      group.add(label);
 
-     const padMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.8, roughness: 0.3 }); // Lower metalness slightly
+     const padMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.8, roughness: 0.3 }); 
      for(let i=0; i<5; i++) {
          const pad = new THREE.Mesh(new THREE.BoxGeometry(6, 4, 0.5), padMat);
          pad.position.set(-30, (i-2)*10, dim.depth/2 + 0.25);
@@ -810,7 +1033,6 @@ function updateObject(group: THREE.Group, state: SimulationState) {
   else if (type === ObjectType.GlassBottle) {
       const h = dim.h;
       const r = dim.w / 2;
-      
       const points = [];
       points.push(new THREE.Vector2(0, 0)); 
       points.push(new THREE.Vector2(r * 0.7, 0));
@@ -825,14 +1047,14 @@ function updateObject(group: THREE.Group, state: SimulationState) {
 
       const glassGeo = new THREE.LatheGeometry(points, 64);
       const glassMat = new THREE.MeshPhysicalMaterial({
-          color: 0xffffff, // White base allows light to enter, Color comes from Attenuation
+          color: 0xffffff,
           transmission: 1.0,
           opacity: 1,
           metalness: 0.0,
           roughness: 0.0, 
           ior: 1.5,
           thickness: 2.0, 
-          attenuationColor: new THREE.Color(0xcc7a00), // Amber Tint
+          attenuationColor: new THREE.Color(0xcc7a00),
           attenuationDistance: 40.0, 
           side: THREE.DoubleSide
       });
@@ -841,7 +1063,6 @@ function updateObject(group: THREE.Group, state: SimulationState) {
       
       const liqPoints = points.slice(0, 5).map(p => new THREE.Vector2(p.x * 0.88, p.y < h*0.7 ? p.y + 2 : h*0.7));
       const liqGeo = new THREE.LatheGeometry(liqPoints, 32);
-      // Make liquid transmissive too (like beer) but dark
       const liqMat = new THREE.MeshPhysicalMaterial({ 
           color: 0x331a00,
           transmission: 0.5,
@@ -850,7 +1071,7 @@ function updateObject(group: THREE.Group, state: SimulationState) {
           ior: 1.33
       });
       const liquid = new THREE.Mesh(liqGeo, liqMat);
-      liquid.scale.set(0.95, 0.95, 0.95); // Ensure it is inside glass
+      liquid.scale.set(0.95, 0.95, 0.95);
       setShadows(liquid);
 
       const labelGeo = new THREE.CylinderGeometry(r + 0.1, r + 0.1, h * 0.3, 64, 1, true);
@@ -881,13 +1102,11 @@ function updateObject(group: THREE.Group, state: SimulationState) {
   else if (type === ObjectType.AluminumCan) {
       const h = dim.h;
       const r = dim.w / 2;
-      
       const aluMat = new THREE.MeshStandardMaterial({
            color: 0xffffff,
            map: createBeerLabelTexture("RoboHops", "Neural IPA", 200),
-           metalness: 0.6, // Kept lower to show up without Env Map
+           metalness: 0.6,
            roughness: 0.35, 
-           // envMapIntensity removed (no env map)
       });
       const topMat = new THREE.MeshStandardMaterial({ 
           color: 0xe5e5e5, 
@@ -937,13 +1156,62 @@ function updateObject(group: THREE.Group, state: SimulationState) {
       canGroup.add(rim);
       canGroup.add(lid);
       canGroup.add(tab);
-      
       group.add(canGroup);
   }
   else if (type === ObjectType.MatteBlock) {
+      // Define specific materials for each face of the block
+      
+      const baseMaterialProps = {
+        color: 0x94a3b8,
+        roughness: 0.9,
+        metalness: 0.1,
+      };
+
+      // 1. Right (px): Mixed Relief
+      const matRight = new THREE.MeshStandardMaterial({
+          ...baseMaterialProps,
+          bumpMap: createMixedTexture(),
+          bumpScale: 1.0,
+      });
+
+      // 2. Left (nx): Smooth
+      const matLeft = new THREE.MeshStandardMaterial({
+          ...baseMaterialProps,
+      });
+
+      // 3. Top (py): Scratches
+      const matTop = new THREE.MeshStandardMaterial({
+          ...baseMaterialProps,
+          bumpMap: createScratchesTexture(),
+          bumpScale: 0.5,
+      });
+
+      // 4. Bottom (ny): Dot Matrix Print
+      const matBottom = new THREE.MeshStandardMaterial({
+          ...baseMaterialProps,
+          map: createDotMatrixTexture(),
+      });
+
+      // 5. Front (pz): Embossed / Auto-relevo
+      const matFront = new THREE.MeshStandardMaterial({
+          ...baseMaterialProps,
+          bumpMap: createEmbossedTexture(),
+          bumpScale: 1.0, 
+      });
+
+      // 6. Back (nz): Debossed / Baixo-relevo
+      const matBack = new THREE.MeshStandardMaterial({
+          ...baseMaterialProps,
+          bumpMap: createDebossedTexture(),
+          bumpScale: 1.0, // Black in texture pushes down relative to grey
+      });
+
+      // Array order for BoxGeometry: Right, Left, Top, Bottom, Front, Back
+      const materials = [matRight, matLeft, matTop, matBottom, matFront, matBack];
+
       const block = new THREE.Mesh(
           new THREE.BoxGeometry(dim.w, dim.h, dim.depth),
-          new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.9, metalness: 0.0 })
+          materials
       );
       setShadows(block);
       group.add(block);
@@ -959,29 +1227,19 @@ function updateObject(group: THREE.Group, state: SimulationState) {
 function updateLights(group: THREE.Group, state: SimulationState, camY: number, camZ: number, targetY: number) {
   while(group.children.length > 0){ group.remove(group.children[0]); }
   
-  // 1. GLOBAL ILLUMINATION (INDEPENDENT of Fixture)
-  const globalInt = state.globalIntensity / 100; // 0 to 1
+  const globalInt = state.globalIntensity / 100;
   
-  // --- CALCULATE TOTAL INTENSITY WITH MULTIPLIER ---
-  // Default to 1 if undefined for safety
   const multiplier = state.lightMultiplier || 1;
   const intensityPercent = state.lightIntensity;
   const baseIntensity = (intensityPercent / 100) * multiplier;
   const colorHex = getLightColorHex(state.lightColor);
 
   if (state.globalEnv === GlobalEnv.Studio) {
-      // PITCH BLACK STUDIO (PHYSICAL BOX):
-      // Calculate bounce based on the scaled intensity. 
-      // Multiplier affects bounce light too, making the room brighter when strobing.
-      
-      const bounceIntensity = baseIntensity * 0.15; // 15% bounce of total power
+      const bounceIntensity = baseIntensity * 0.15;
       if (bounceIntensity > 0.01) {
-          // Use light color for the bounce
-          // Hemisphere light: Sky = Light Color, Ground = Dark Floor Color
           const bounce = new THREE.HemisphereLight(colorHex, 0x111111, bounceIntensity);
           group.add(bounce);
       } else {
-          // Absolute minimum visibility
           const studioAmb = new THREE.AmbientLight(0xffffff, 0.01);
           group.add(studioAmb);
       }
@@ -990,7 +1248,6 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
   else if (state.globalEnv === GlobalEnv.Factory) {
       const hemi = new THREE.HemisphereLight(0xddeeff, 0x333333, globalInt * 1.0);
       group.add(hemi);
-      // Soft overhead factory light
       const topFill = new THREE.DirectionalLight(0xffffff, globalInt * 0.5);
       topFill.position.set(50, 200, 50);
       group.add(topFill);
@@ -1003,33 +1260,21 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
       sun.castShadow = true;
       group.add(sun);
   }
-
-  // 2. FIXTURE ILLUMINATION
   
   const dist = state.lightDistance || 200;
   
-  // Helper for Shadows
   const configShadow = (light: THREE.Light) => {
     light.castShadow = true;
     light.shadow.mapSize.width = 1024;
     light.shadow.mapSize.height = 1024;
     light.shadow.bias = -0.0001;
-    // light.shadow.radius = 1; // Slight soft shadow
   };
 
-  // Higher intensity scale needed for Spot/Point lights in ACES Filmic workflow
-  // especially when they have decay enabled.
-  const DIRECTIONAL_SCALE = 50.0; 
   const SPOT_SCALE = 400.0;
-
   const targetVec = new THREE.Vector3(0, targetY, 0);
   const fixture = state.lightType;
 
-  // --- DOME & TUNNEL (DIFFUSE) ---
   if (fixture === LightFixture.Dome || fixture === LightFixture.Tunnel) {
-       // These ARE allowed to add Ambient/Hemisphere light because that is their physical nature.
-       // They represent scattered light coming from all directions.
-       
        const isTunnel = fixture === LightFixture.Tunnel;
        const geo = isTunnel 
            ? new THREE.CylinderGeometry(dist, dist, dist*3, 32, 1, true)
@@ -1039,7 +1284,6 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
            color: colorHex,
            side: THREE.BackSide, 
            transparent: true,
-           // Visual opacity doesn't scale with multiplier to avoid blinding the user's view of the 3D model
            opacity: 0.1 + (intensityPercent/100 * 0.3), 
        });
        const domeMesh = new THREE.Mesh(geo, mat);
@@ -1051,11 +1295,9 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
        }
        group.add(domeMesh);
 
-       // The actual light source for Dome is ambient/hemi
        const hemi = new THREE.HemisphereLight(colorHex, 0x050505, baseIntensity * 5.0);
        group.add(hemi);
        
-       // Plus a very soft top down light for a tiny bit of definition
        const dl = new THREE.DirectionalLight(colorHex, baseIntensity * 2.0);
        dl.position.set(0, 200, 0);
        dl.target.position.copy(targetVec);
@@ -1063,21 +1305,13 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
        group.add(dl.target);
   }
   else if (fixture === LightFixture.Panel && state.lightPosition === LightPosition.Back) {
-      // --- BACKLIGHT ---
-      // Collimated Directional Light from behind
-      
       const objDim = OBJECT_DIMS[state.objectType];
       const zPos = - (objDim.depth/2) - dist;
-
-      // Visual Panel
       const panelGeo = new THREE.PlaneGeometry(400, 400);
       const panelMat = new THREE.MeshBasicMaterial({ color: colorHex });
       const panel = new THREE.Mesh(panelGeo, panelMat);
       panel.position.set(0, targetY, zPos); 
       group.add(panel);
-
-      // Physics Light
-      // Backlight needs to be bright to saturate sensor (silhouette)
       const dl = new THREE.DirectionalLight(colorHex, baseIntensity * 10.0);
       dl.position.set(0, targetY, zPos + 10);
       dl.target.position.set(0, targetY, 200);
@@ -1085,35 +1319,24 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
       group.add(dl.target);
   }
   else if (fixture === LightFixture.Coaxial) {
-      // --- COAXIAL ---
-      // Collimated Directional Light from Camera Axis
-      
-      const dl = new THREE.DirectionalLight(colorHex, baseIntensity * 5.0); // No decay for Directional
+      const dl = new THREE.DirectionalLight(colorHex, baseIntensity * 5.0); 
       dl.position.set(0, camY, camZ);
       dl.target.position.copy(targetVec);
       configShadow(dl);
       group.add(dl);
       group.add(dl.target);
-
-      // Visual Box
       const box = new THREE.Mesh(new THREE.BoxGeometry(40, 40, 60), new THREE.MeshBasicMaterial({ color: 0x333333 }));
       box.position.set(30, camY, camZ - 50);
       group.add(box);
   }
   else if (fixture === LightFixture.Spot) {
-      // --- SPOT ---
-      // Point/Spot source with DECAY. Distance matters!
-      
       const fixtureGroup = new THREE.Group();
       let x=0, y=targetY, z=0;
-      
       if (state.lightPosition === LightPosition.Top) { x=0; y=targetY+dist; z=0; }
       else if (state.lightPosition === LightPosition.Side) { x=dist; y=targetY; z=0; }
       else { 
-          // Fallback to top if undefined for spot
            x=0; y=targetY+dist; z=0;
       }
-      
       fixtureGroup.position.set(x, y, z);
       fixtureGroup.lookAt(targetVec);
       group.add(fixtureGroup);
@@ -1121,81 +1344,57 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
       const s = new THREE.SpotLight(colorHex, baseIntensity * SPOT_SCALE);
       s.position.set(0, 0, 0);
       s.target.position.set(0, 0, 100); 
-      
       s.angle = state.lightConfig === LightConfig.Narrow ? 0.25 : 0.5;
       s.penumbra = 0.3;
-      s.decay = 2; // Physical falloff
-      s.distance = dist * 4; // Light reaches 0 intensity at 4x the mounting distance
-      
+      s.decay = 2; 
+      s.distance = dist * 4; 
       configShadow(s);
       fixtureGroup.add(s);
       fixtureGroup.add(s.target);
-
-      // Visual Bulb
       const bulb = new THREE.Mesh(new THREE.CylinderGeometry(5, 10, 15), new THREE.MeshBasicMaterial({ color: colorHex }));
       bulb.rotation.x = Math.PI / 2;
       fixtureGroup.add(bulb);
   }
   else if (fixture === LightFixture.Ring) {
-      // --- RING LIGHT ---
-      // Array of Spots. Decay enabled.
-      
       const isLowAngle = state.lightPosition === LightPosition.LowAngle;
       const ringGroup = new THREE.Group();
-      
       if (isLowAngle) {
           const r = Math.max(dist, 60);
           ringGroup.position.set(0, targetY, 0);
           group.add(ringGroup);
-
           const torus = new THREE.Mesh(new THREE.TorusGeometry(r, 4, 8, 32), new THREE.MeshBasicMaterial({ color: colorHex }));
           torus.rotation.x = Math.PI / 2;
           ringGroup.add(torus);
-
           const count = 8;
           for(let i=0; i<count; i++) {
               const a = (i/count) * Math.PI * 2;
               const sx = Math.cos(a) * r;
               const sz = Math.sin(a) * r;
-              
-              const s = new THREE.SpotLight(colorHex, baseIntensity * SPOT_SCALE * 0.4); // Less intensity per bulb
+              const s = new THREE.SpotLight(colorHex, baseIntensity * SPOT_SCALE * 0.4); 
               s.position.set(sx, 5, sz);
               s.target.position.set(0, 0, 0);
               s.angle = 0.5;
               s.penumbra = 0.5;
               s.decay = 2;
-              s.distance = 200; // Low angle is close range
+              s.distance = 200; 
               configShadow(s);
               ringGroup.add(s);
               ringGroup.add(s.target);
           }
       } else {
-          // Standard Camera Ring
-          // Important: Camera Ring distance is usually tied to WD, but here we have a slider.
-          // We will respect the slider as an offset or absolute position?
-          // The slider says "Light Distance". For ring, this usually means WD. 
-          // Let's place it at camera position, but use the slider value for intensity calculation ref if we wanted,
-          // but better to just place it at the slider distance from object along camera axis.
-          
-          // Calculate position along camera vector
-          // Camera vector is from (0,camY,camZ) to (0,targetY,0)
           const camVec = new THREE.Vector3(0, camY - targetY, camZ).normalize();
           const ringPos = camVec.clone().multiplyScalar(dist).add(new THREE.Vector3(0, targetY, 0));
-          
           ringGroup.position.copy(ringPos);
           ringGroup.lookAt(targetVec);
           group.add(ringGroup);
-          
           const r = 45;
           const torus = new THREE.Mesh(new THREE.TorusGeometry(r, 8, 8, 32), new THREE.MeshBasicMaterial({ color: colorHex }));
           ringGroup.add(torus);
-
           const count = 6;
           for(let i=0; i<count; i++) {
               const a = (i/count) * Math.PI * 2;
               const sx = Math.cos(a) * r;
               const sy = Math.sin(a) * r;
-              
               const s = new THREE.SpotLight(colorHex, baseIntensity * SPOT_SCALE * 0.3);
               s.position.set(sx, sy, 0);
               s.target.position.set(sx * 0.8, sy * 0.8, 100); 
@@ -1210,7 +1409,6 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
       }
   }
   else if (fixture === LightFixture.Bar) {
-      // --- BAR LIGHT ---
       const len = 100;
       const width = 20;
 
@@ -1220,18 +1418,12 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
            barWrapper.lookAt(0,0,0); 
            barWrapper.rotateZ(rollRad); 
            parent.add(barWrapper);
-
-           // Visuals
            const face = new THREE.Mesh(new THREE.PlaneGeometry(len, width), new THREE.MeshBasicMaterial({ color: colorHex }));
            face.position.z = 1; 
            barWrapper.add(face);
            const box = new THREE.Mesh(new THREE.BoxGeometry(len+2, width+2, 5), new THREE.MeshBasicMaterial({ color: 0x333333 }));
            box.position.z = -2;
            barWrapper.add(box);
-
-           // Lights (Array of Spots to simulate bar)
-           // If we use RectAreaLight it would be better but shadows are tricky/expensive in older Three.js
-           // Sticking to Spots for robust shadows.
            for(let k=-1; k<=1; k++) {
               const s = new THREE.SpotLight(colorHex, baseIntensity * SPOT_SCALE * 0.3);
               s.position.set(k * 30, 0, 2);
@@ -1249,44 +1441,57 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
       if (state.lightPosition === LightPosition.LowAngle) {
           const fixtureGroup = new THREE.Group();
           fixtureGroup.position.copy(targetVec); 
+          
+          // FIX: Align the fixture group to face the camera.
+          // This ensures the "ring" of bars is perpendicular to the viewing angle,
+          // creating the "Axial" effect (grazing the face seen by camera).
+          fixtureGroup.lookAt(0, camY, camZ);
+          
           group.add(fixtureGroup);
           
           const radius = Math.max(dist, 80);
+          
+          // Define angles in the local XY plane of the fixture group (the face of the object)
+          // 0 = Right, PI/2 = Top, etc.
           const configs = {
-              [LightConfig.Single]: [0],
-              [LightConfig.Dual]: [0, Math.PI],
-              [LightConfig.Quad]: [0, Math.PI/2, Math.PI, -Math.PI/2]
+              [LightConfig.Single]: [Math.PI/2], // Top
+              [LightConfig.Dual]: [Math.PI/2, -Math.PI/2], // Top/Bottom
+              [LightConfig.Quad]: [0, Math.PI/2, Math.PI, -Math.PI/2] // Square
           };
-          const angles = configs[state.lightConfig] || [0];
-
+          const angles = configs[state.lightConfig] || [Math.PI/2];
+          
           angles.forEach(ang => {
               const x = Math.cos(ang) * radius;
-              const z = Math.sin(ang) * radius;
-              addBarToGroup(fixtureGroup, new THREE.Vector3(x, 0, z), 0);
+              const y = Math.sin(ang) * radius;
+              
+              // We place them on the local XY plane (Z=0)
+              // We determine rotation (roll) to make them form a square border
+              
+              let roll = 0;
+              // If the bar is at Left/Right (cos is dominant), we want it vertical.
+              if (Math.abs(Math.cos(ang)) > 0.5) {
+                 roll = Math.PI / 2;
+              }
+              
+              addBarToGroup(fixtureGroup, new THREE.Vector3(x, y, 0), roll);
           });
+
       } else {
-          // Standard: Top, Side, Back
           let pos = new THREE.Vector3();
-          
           if (state.lightPosition === LightPosition.Top) pos.set(0, dist, 0); 
           else if (state.lightPosition === LightPosition.Side) pos.set(dist, 0, 0);
           else if (state.lightPosition === LightPosition.Back) pos.set(0, 0, -dist);
-          
           const objDim = OBJECT_DIMS[state.objectType];
           if (state.lightPosition === LightPosition.Top) pos.y += objDim.h/2;
           if (state.lightPosition === LightPosition.Side) pos.x += objDim.w/2;
           if (state.lightPosition === LightPosition.Back) pos.z -= objDim.depth/2;
-
           const absPos = pos.clone().add(targetVec);
-
           const fixtureGroup = new THREE.Group();
           fixtureGroup.position.copy(absPos);
           fixtureGroup.lookAt(targetVec);
           group.add(fixtureGroup);
-          
           let baseRoll = 0; 
           if (state.lightPosition === LightPosition.Side) baseRoll = Math.PI / 2;
-
           if (state.lightConfig === LightConfig.Single) {
              addBarToGroup(fixtureGroup, new THREE.Vector3(0,0,0), baseRoll);
           }
@@ -1304,7 +1509,6 @@ function updateLights(group: THREE.Group, state: SimulationState, camY: number, 
           }
       }
   }
-
 }
 
 export default SimulatedImage;

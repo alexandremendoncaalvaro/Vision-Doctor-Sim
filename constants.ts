@@ -23,27 +23,27 @@ export const OBJECT_DIMS: Record<ObjectType, { w: number; h: number, depth: numb
   [ObjectType.BottleCap]: { w: 28, h: 28, depth: 6 },
 };
 
-// Curated list of high-coherence goals
+// Curated list of high-coherence goals based on the Guide Table
 export const OBJECT_GOALS: Record<ObjectType, string[]> = {
   [ObjectType.PCB]: [
-    "Read Laser Etched Text (OCR)",
-    "Check Solder Bridges (Shorts)",
-    "Verify Component Presence"
+    "Verify Component Presence", // Cat 1: Presence
+    "Read Laser Etched Text", // Cat 6: Text (Etched)
+    "Check Solder Bridges" // Cat 3/6: Detail/Relief
   ],
   [ObjectType.GlassBottle]: [
-    "Inspect Fill Level",
-    "Read Label Text"
+    "Inspect Fill Level", // Cat 9: Transparent/Liquid
+    "Read Label Text" // Cat 4/6: Printed Text
   ],
   [ObjectType.AluminumCan]: [
-    "Read Bottom Dot Peen Code",
-    "Inspect Pull Tab Integrity"
+    "Read Bottom Dot Peen Code", // Cat 4: DPM on Metal
+    "Inspect Pull Tab Integrity" // Cat 1/7: Metal Features
   ],
   [ObjectType.MatteBlock]: [
-    "Measure Dimensions (Backlight)",
-    "Check Surface Flatness"
+    "Measure Dimensions", // Cat 2: Dimensional
+    "Detect Surface Scratches" // Cat 3: Scratches (Dark Field)
   ],
   [ObjectType.BottleCap]: [
-    "Read Top Print Code",
-    "Inspect Liner Seal Integrity"
+    "Read Top Print Code", // Cat 6: Printed Text
+    "Inspect Liner Seal Integrity" // Cat 1: Presence/Integrity
   ]
 };
